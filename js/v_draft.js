@@ -25,16 +25,15 @@
     const d = L.draft, cp = CS.curPick(L);
     if (!cp) return `<div class="panel hero"><div class="big">Draft complete</div><div class="note">Everyone is drafted. Time to play.</div><button class="btn gold" data-act="finishDraftStart">Start the ${d.kind === 'future' ? d.year : L.year} season</button><button class="btn" data-act="undoPick">Undo last pick</button></div>${board(L)}`;
     const t = CS.team(L, cp.owner), allowed = CS.allowedPositions(L, cp.owner), need = d.kind === 'initial' ? CS.needs(L, cp.owner) : [];
-    const df = CS.ui.df, tab = CS.ui.draftTab;
+    const df = CS.ui.df, taken = CS.takenNfl(L), avail = L.players.filter(p => !p.tid), tab = CS.ui.draftTab || (avail.length > 60 ? 'pool' : 'log');
     if (!allowed.includes(df.pos)) df.pos = allowed[0];
-    const taken = CS.takenNfl(L), avail = L.players.filter(p => !p.tid);
     const via = cp.owner !== cp.orig ? ` · via ${esc(CS.tname(L, cp.orig))}` : '';
     const need2 = need.length ? need.reduce((a, p) => (a[p] = (a[p] || 0) + 1, a), {}) : null;
     let h = `<div class="panel hero" style="border-left-color:${CS.tcolor(L, cp.owner)}"><div class="row">${CS.tlogo(L, cp.owner, 54)}<div class="grow"><div class="lbl">${d.year} draft · round ${cp.round} · pick ${cp.n} of ${d.order.length}${via}</div>
       <div class="tname" style="font-size:26px">${t.base ? esc(CS.tfull(L, cp.owner)) : esc(t.mgr) + ' is on the clock'}</div><div class="mgr">${esc(t.mgr)}${t.base ? '' : ' · no base team yet'}</div></div></div>
       ${!t.base ? `<div class="note gold">First pick: a QB. His NFL team becomes the base team.</div>` : ''}
       ${need2 ? `<div class="chips">${Object.entries(need2).map(([p, n]) => `<span class="chip need">Needs ${n} ${p}</span>`).join('')}</div>` : (d.kind === 'initial' ? '<div class="note">Starting lineup is full. Anything now goes to the bench.</div>' : '')}</div>`;
-    h += `<div class="chips sp"><span class="chip ${tab === 'log' ? 'on' : ''}" data-act="dTab" data-a="log">Log a card</span><span class="chip ${tab === 'pool' ? 'on' : ''}" data-act="dTab" data-a="pool">From my pool (${avail.length})</span></div>`;
+    h += `<div class="chips sp"><span class="chip ${tab === 'log' ? 'on' : ''}" data-act="dTab" data-a="log">Log a card</span><span class="chip ${tab === 'pool' ? 'on' : ''}" data-act="dTab" data-a="pool">From the pool (${avail.length})</span></div>`;
     if (tab === 'log') {
       const names = avail.filter(p => allowed.includes(p.pos)).map(p => `<option value="${esc(p.name)}">`).join('');
       h += `<div class="panel"><div class="h">The card they picked</div><datalist id="dnames">${names}</datalist>
@@ -53,7 +52,7 @@
       list.sort((a, b) => b.ovr - a.ovr);
       h += `<div class="panel"><div class="chips"><span class="chip ${!f.pos ? 'on' : ''}" data-act="dpPos" data-a="">All</span>${allowed.filter((p, i, a) => a.indexOf(p) === i).map(p => `<span class="chip ${f.pos === p ? 'on' : ''}" data-act="dpPos" data-a="${p}">${p}</span>`).join('')}</div>
         <input type="search" id="dpQ" data-bind="dpQ" placeholder="Search by name" value="${esc(f.q)}">
-        <div class="note">${list.length} available${!t.base ? ' (QBs with an open NFL team)' : ''}. Showing the top 25.</div>
+        <div class="note">${list.length} available${!t.base ? ' (QBs with an open NFL team)' : ''}. Showing the top 25. Search to find anyone.</div>
         <div class="col" style="gap:6px">${list.slice(0, 25).map(p => CS.pcard(L, p, { mini: true, acts: `<button class="btn xs" data-act="editCard" data-pid="${p.id}">Edit</button><button class="btn xs gold" data-act="poolPick" data-pid="${p.id}">Draft</button>` })).join('') || '<div class="note">No cards match. Use Log a card instead.</div>'}</div></div>`;
     }
     h += `<div class="row sp"><button class="btn" data-act="autoPick">Auto pick best</button><button class="btn" data-act="skipPick">Skip pick</button><button class="btn red" data-act="undoPick" ${d.log.length ? '' : 'disabled'}>Undo last</button></div>`;

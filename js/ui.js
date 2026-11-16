@@ -4,7 +4,7 @@
   CS.views = {}; CS.act = {}; CS.bind = {};
   CS.L = null;
   CS.ui = { nl: null, cardF: { st: 'fa', pos: '', q: '', sort: 'ovr', add: false, bulk: false }, qa: { pos: 'WR', nfl: '', sub: '', name: '', ovr: '', age: '' },
-    draftTab: 'log', draftF: { pos: '', q: '' }, df: { name: '', pos: '', sub: '', ovr: '', age: '', nfl: '' }, trade: null, seasonTab: 'games', wk: null, teamSort: 'rec', cm: 'teams' };
+    draftTab: null, draftF: { pos: '', q: '' }, df: { name: '', pos: '', sub: '', ovr: '', age: '', nfl: '' }, trade: null, seasonTab: 'games', wk: null, teamSort: 'rec', cm: 'teams' };
 
   // ---------- routing ----------
   CS.route = () => {
@@ -100,7 +100,7 @@
         ${view(L, r)}
         <nav class="tabs">${TABS.map(t => `<a href="#/l/${L.id}/${t[0]}" class="${tab === t[0] ? 'on' : ''}">${t[1]}</a>`).join('')}</nav>`;
     }
-    app.innerHTML = html;
+    CS._r = true; try { app.innerHTML = html; } finally { CS._r = false; }
     window.scrollTo(0, keep === false ? 0 : y);
     if (CS.after) { const f = CS.after; CS.after = null; f(); }
   };
@@ -122,12 +122,12 @@
       <input type="file" id="impFile" accept=".json,application/json" style="display:none">`;
   }
   CS.act.openLeague = d => CS.go('l/' + d.a + '/hub');
-  CS.act.goNew = () => { const n = 6; CS.ui.nl = { name: 'Cards Season', n, mgrs: Array(16).fill(''), cap: 110, rounds: 2, copy: '' }; CS.go('new'); };
+  CS.act.goNew = () => { const n = 6; CS.ui.nl = { name: 'Cards Season', n, mgrs: Array(16).fill(''), cap: 110, rounds: 2, copy: '', pool: 'own' }; CS.go('new'); };
   CS.act.importLeague = () => { const f = document.getElementById('impFile'); f.onchange = () => { const file = f.files[0]; if (!file) return; const rd = new FileReader(); rd.onload = () => { try { const L = CS.importLeague(rd.result); CS.toast('Imported ' + L.name); CS.render(); } catch (e) { CS.toast(e.message, true); } }; rd.readAsText(file); }; f.click(); };
 
   // ---------- new league ----------
   function newView() {
-    const s = CS.ui.nl || (CS.ui.nl = { name: 'Cards Season', n: 6, mgrs: Array(16).fill(''), cap: 110, rounds: 2, copy: '' });
+    const s = CS.ui.nl || (CS.ui.nl = { name: 'Cards Season', n: 6, mgrs: Array(16).fill(''), cap: 110, rounds: 2, copy: '', pool: 'own' });
     const others = CS.db.order.map(id => CS.db.leagues[id]).filter(Boolean);
     const games = (s.n % 2 ? s.n - 1 : s.n - 1) * s.rounds;
     return `<div class="top"><a class="back" href="#/"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M10 2L4 8l6 6" fill="none" stroke="#eef1f7" stroke-width="2.4"/></svg></a><div class="ttl">New league</div></div>
@@ -136,6 +136,8 @@
         <div class="stepper"><button data-act="nlN" data-a="-1">&minus;</button><b>${s.n}</b><button data-act="nlN" data-a="1">+</button><span class="dim small">2 to 16 teams</span></div></div>
       <div class="panel"><div class="h">Who is playing?</div><div class="note">Type each person's name. Their team name comes from the QB they draft.</div>
         <div class="g2">${Array.from({ length: s.n }, (_, i) => `<label class="f">Team ${i + 1}<input type="text" data-bind="nlMgr" data-i="${i}" value="${esc(s.mgrs[i])}" placeholder="Player ${i + 1}"></label>`).join('')}</div></div>
+      <div class="panel"><div class="h">Card pool</div><div class="note">Where do the cards you draft from come from?</div>
+        <div class="col" style="gap:8px">${[{ id: 'own', name: 'My own cards', blurb: 'Type in the cards you have at home. You can also load a preset pool later.' }].concat(CS.POOLS).map(p => `<div class="pc mini ${s.pool === p.id ? 'sel' : ''}" style="--tc:${s.pool === p.id ? '#ffc93c' : '#3a4256'};cursor:pointer;grid-template-columns:1fr auto" data-act="nlPool" data-a="${p.id}"><div style="padding-left:10px"><div class="nm">${esc(p.name)}</div><div class="mt">${esc(p.blurb)}</div></div><div class="ac"><span class="chip ${s.pool === p.id ? 'on' : ''}">${p.id === 'own' ? 'You add' : CS.poolCount(p.id) + ' cards'}</span></div></div>`).join('')}</div></div>
       <div class="panel"><div class="h">Season</div>
         <div class="lbl">Games against each opponent</div>
         <div class="seg">${[1, 2, 3].map(r => `<button class="${s.rounds === r ? 'on' : ''}" data-act="nlRounds" data-a="${r}">${r}x</button>`).join('')}</div>
@@ -149,13 +151,14 @@
   CS.bind.nlCap = v => { CS.ui.nl.cap = Math.max(20, +v || 110); };
   CS.bind.nlCopy = v => { CS.ui.nl.copy = v; };
   CS.act.nlN = d => { const s = CS.ui.nl; s.n = CS.clamp(s.n + +d.a, 2, 16); CS.render(); };
+  CS.act.nlPool = d => { const s = CS.ui.nl; s.pool = d.a; if (s.cap === 110 || s.cap === 150) s.cap = (d.a === 'all' || d.a === 'both') ? 150 : 110; CS.render(); };
   CS.act.nlRounds = d => { CS.ui.nl.rounds = +d.a; CS.render(); };
   CS.act.createLeague = () => {
     const s = CS.ui.nl, mgrs = Array.from({ length: s.n }, (_, i) => CS.cleanName(s.mgrs[i]) || 'Player ' + (i + 1));
     const dupe = mgrs.find((m, i) => mgrs.indexOf(m) !== i);
     if (dupe) return CS.toast('Two teams are named "' + dupe + '". Give each person a different name.', true);
-    const L = CS.createLeague({ name: s.name, mgrs, cap: s.cap, rounds: s.rounds, copyFrom: s.copy });
-    CS.ui.nl = null; CS.toast('League created. Add your cards next.'); CS.go('l/' + L.id + '/cards');
+    const L = CS.createLeague({ name: s.name, mgrs, cap: s.cap, rounds: s.rounds, copyFrom: s.copy, pool: s.pool });
+    CS.ui.nl = null; CS.toast(s.pool === 'own' ? 'League created. Add your cards next.' : 'League created with ' + L.players.length + ' cards.'); CS.go('l/' + L.id + '/' + (s.pool === 'own' ? 'cards' : 'draft'));
   };
 
   // ---------- boot ----------
@@ -169,6 +172,7 @@
       e.preventDefault(); f(el.dataset, el, e);
     });
     const onIn = e => {
+      if (CS._r) return; // the browser fires 'change' on an input that is being replaced by a render
       const el = e.target.closest('[data-bind]'); if (!el) return;
       const f = CS.bind[el.dataset.bind]; if (!f) return;
       const isText = el.matches('input[type=text],input[type=number],input[type=search],textarea');

@@ -22,6 +22,7 @@
         <label class="f s2">NFL team<select data-bind="qaNfl">${CS.nflOptions(qa.nfl)}</select></label></div>
         <button class="btn gold block" data-act="addCard" style="font-size:18px;padding:11px">Add card</button>
         <div class="note">The NFL team on the card matters for QBs: it becomes the base team when drafted.</div>`}</div>
+      ${presetPanel(L)}
       <div class="panel"><div class="h">${fa2 ? 'Free agency' : 'Card pool'} <small>${list.length} shown</small></div>
         <div class="chips">${[['fa', 'Free agents (' + fa.length + ')'], ['team', 'On teams (' + (all.length - fa.length) + ')'], ['all', 'All']].map(s => `<span class="chip ${F.st === s[0] ? 'on' : ''}" data-act="cSt" data-a="${s[0]}">${s[1]}</span>`).join('')}</div>
         <div class="chips"><span class="chip ${!F.pos ? 'on' : ''}" data-act="cPos" data-a="">All</span>${CS.POS.map(p => `<span class="chip ${F.pos === p ? 'on' : ''}" data-act="cPos" data-a="${p}">${p}</span>`).join('')}</div>
@@ -35,6 +36,17 @@
       : `<button class="btn xs gold" data-act="contract" data-pid="${p.id}">Sign</button><button class="btn xs" data-act="editCard" data-pid="${p.id}">Edit</button>`;
     return CS.pcard(L, p, { tags, acts, meta: p.tid ? '' : 'asks ' + money(CS.askSal(p)) });
   }
+  function presetPanel(L) {
+    const loaded = L.pools || [];
+    return `<div class="panel"><div class="h">Preset pools</div><div class="note">Add a ready-made pool of cards. Cards already in your pool are skipped, so it's safe to load more than one.</div>
+      <div class="col" style="gap:8px">${CS.POOLS.map(p => `<div class="row"><div class="grow"><b>${esc(p.name)}</b> <span class="dim small">${CS.poolCount(p.id)} cards${loaded.includes(p.id) ? ' · loaded' : ''}</span><div class="note">${esc(p.blurb)}</div></div><button class="btn sm ${loaded.includes(p.id) ? '' : 'gold'}" data-act="loadPool" data-a="${p.id}">${loaded.includes(p.id) ? 'Load again' : 'Add'}</button></div>`).join('')}</div></div>`;
+  }
+  CS.act.loadPool = d => {
+    const L = CS.L, p = CS.POOLS.find(x => x.id === d.a);
+    CS.confirm('Add ' + p.name + '?', CS.poolCount(p.id) + ' cards go into the pool. ' + (L.phase === 'setup' ? '' : 'The league is already running, so new cards will be free agents. '), 'Add cards', () => {
+      const r = CS.loadPool(L, p.id); CS.commit(); CS.toast(r.added + ' cards added' + (r.skipped ? ', ' + r.skipped + ' were already here.' : '.'));
+    });
+  };
   function bulkForm() {
     return `<label class="f">One card per line<textarea id="bulkTxt" data-bind="bulkTxt" placeholder="Patrick Mahomes, QB, 98, 30, KC&#10;Travis Kelce, TE, 91, 36, KC&#10;Micah Parsons, DEF, 94, 27, DAL">${esc(CS.ui.bulk || '')}</textarea></label>
       <div class="note">Order: name, position, overall, age, NFL team. Use QB, RB, WR, TE or DEF (DL, LB, CB, S work too). Team is optional except for QBs.</div>

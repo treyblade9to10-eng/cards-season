@@ -30,6 +30,7 @@
         CS.addCard(L, { name: p.name, pos: p.pos, sub: p.sub, ovr: base.ovr, age: base.age, nfl: p.nfl });
       });
     }
+    if (o.pool && o.pool !== 'own') CS.loadPool(L, o.pool);
     CS.log(L, 'League created with ' + L.teams.length + ' teams.');
     CS.db.leagues[L.id] = L; CS.db.order.unshift(L.id);
     CS.save();
