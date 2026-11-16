@@ -1,66 +1,145 @@
-// CARDS SEASON view: Season (games, table, playoffs, leaders, history) + sim controls.
+// CARDS SEASON view: Season (enter scores, games, table, playoffs, leaders, history).
 (function () {
-  const { esc, money } = CS;
+  const { esc } = CS;
 
-  // ---------- sim controls (used on Hub and Season) ----------
+  // ---------- which games are up next ----------
+  CS.curGames = L => {
+    if (!L.season) return null;
+    const po = L.season.po;
+    if (po && !po.champ) { const rd = po.rounds[po.rounds.length - 1]; return { title: rd.name, games: rd.games, po: true }; }
+    const wi = CS.curWeek(L); if (wi < 0 || po) return null;
+    return { title: 'Week ' + (wi + 1), games: L.season.weeks[wi], po: false };
+  };
+
+  // ---------- score controls (Hub + Season) ----------
   CS.simBar = L => {
     if (!L.season) return '<div class="note">No season yet.</div>';
-    const all = L.season.weeks.flat(), played = all.filter(g => g.played).length;
+    const all = L.season.weeks.flat(), played = all.filter(g => g.played).length, c = CS.curGames(L);
     if (L.phase === 'season') {
-      const w = CS.curWeek(L);
-      if (w < 0) return `<div class="note">Regular season is complete. The top ${CS.playoffSize(L)} teams make the playoffs.</div><button class="btn gold" data-act="startPlayoffs">Start the playoffs</button>`;
-      return `<div class="row"><div class="grow"><div class="lbl">Week ${w + 1} of ${L.season.weeks.length} · ${played} of ${all.length} games played</div><div class="bd"><i style="width:${played / all.length * 100}%"></i></div></div></div>
-        <div class="rowt"><button class="btn" data-act="simNext">Play next game</button><button class="btn gold" data-act="simWeek">Play week ${w + 1}</button><button class="btn" data-act="simRest">Play rest of season</button></div>`;
+      if (!c) return `<div class="note">Regular season is complete. The top ${CS.playoffSize(L)} teams make the playoffs.</div><button class="btn gold" data-act="startPlayoffs">Start the playoffs</button>`;
+      const left = c.games.filter(g => !g.played).length;
+      return `<div class="lbl">${c.title} of ${L.season.weeks.length} · ${played} of ${all.length} games played</div><div class="bd"><i style="width:${played / all.length * 100}%"></i></div>
+        <div class="note">Play your games, then put the final scores in. You can add player stats too. Anything you leave blank gets simulated.</div>
+        <button class="btn gold" data-act="weekSheet" style="font-size:17px">Enter ${c.title} scores${left < c.games.length ? ' (' + left + ' left)' : ''}</button>
+        <div class="rowt"><button class="btn sm" data-act="simWeek">Sim ${c.title} for us</button><button class="btn sm" data-act="simRest">Sim the rest of the season</button></div>`;
     }
-    const po = L.season.po, rd = po.rounds[po.rounds.length - 1];
-    if (po.champ) return '<div class="note">The playoffs are over.</div>';
-    return `<div class="note">${esc(rd.name)}: ${rd.games.map(g => esc(CS.tname(L, g.h)) + ' vs ' + esc(CS.tname(L, g.a))).join(' · ')}</div>
-      <div class="rowt"><button class="btn gold" data-act="simRound">Play ${esc(rd.name)}</button><button class="btn" data-act="simPoAll">Play all playoffs</button></div>`;
+    if (!c) return '<div class="note">The playoffs are over.</div>';
+    const left = c.games.filter(g => !g.played).length;
+    return `<div class="note">${esc(c.title)}: ${c.games.map(g => esc(CS.tname(L, g.h)) + ' vs ' + esc(CS.tname(L, g.a))).join(' · ')}</div>
+      <button class="btn gold" data-act="weekSheet" style="font-size:17px">Enter ${esc(c.title)} scores${left < c.games.length ? ' (' + left + ' left)' : ''}</button>
+      <div class="rowt"><button class="btn sm" data-act="simRound">Sim ${esc(c.title)} for us</button><button class="btn sm" data-act="simPoAll">Sim all playoffs</button></div>`;
   };
   CS.showResults = (title, games) => {
     const L = CS.L;
     CS.modal(`<div class="h">${esc(title)}</div><div class="col sp">${games.map(g => CS.gameRow(L, g)).join('')}</div><button class="btn gold block sp" data-act="closeModal">Nice</button>`);
   };
-  CS.act.simNext = () => { const g = CS.simNext(CS.L); CS.commit(); if (g) CS.gameModal(g.id); };
-  CS.act.simWeek = () => { const L = CS.L, w = CS.curWeek(L), gs = CS.simWeek(L); CS.commit(); CS.showResults('Week ' + (w + 1) + ' scores', gs); };
-  CS.act.simRest = () => CS.confirm('Play the rest of the season?', 'Every remaining game is played right now. You can still trade and sign people after.', 'Play it', () => { CS.simRest(CS.L); CS.commit(); CS.toast('Regular season done.'); });
+  CS.act.simWeek = () => CS.confirm('Sim this week?', 'Every game that has not been played yet gets a simulated score and stats. Do this only for games you are not playing yourselves.', 'Sim it', () => {
+    const L = CS.L, c = CS.curGames(L); c.games.filter(g => !g.played).forEach(g => CS.playGame(L, g, false)); CS.commit(); CS.showResults(c.title + ' scores', c.games);
+  });
+  CS.act.simRest = () => CS.confirm('Sim the rest of the season?', 'Every remaining game gets a simulated score. Games you already entered stay as they are.', 'Sim it', () => { CS.simRest(CS.L); CS.commit(); CS.toast('Regular season done.'); });
   CS.act.startPlayoffs = () => { CS.startPlayoffs(CS.L); CS.commit(); };
-  CS.act.simRound = () => { const rd = CS.simPoRound(CS.L); CS.commit(); if (rd) CS.showResults(rd.name + ' scores', rd.games); };
-  CS.act.simPoAll = () => { CS.simPoAll(CS.L); CS.commit(); CS.toast('Playoffs complete.'); };
+  CS.act.simRound = () => CS.confirm('Sim this round?', 'Games you have not entered get a simulated score.', 'Sim it', () => { const rd = CS.simPoRound(CS.L); CS.commit(); if (rd) CS.showResults(rd.name + ' scores', rd.games); });
+  CS.act.simPoAll = () => CS.confirm('Sim all the playoffs?', 'Every playoff game that has not been entered is simulated, all the way to the champion.', 'Sim it', () => { CS.simPoAll(CS.L); CS.commit(); CS.toast('Playoffs complete.'); });
 
-  // ---------- game modal ----------
-  CS.findGame = (L, gid) => {
-    if (!L.season) return null;
-    for (const w of L.season.weeks) for (const g of w) if (g.id === gid) return g;
-    if (L.season.po) for (const r of L.season.po.rounds) for (const g of r.games) if (g.id === gid) return g;
-    return null;
+  // ---------- the week sheet: one box per score ----------
+  const wsRow = (L, g) => {
+    if (g.played) return `<div class="ws done"><div class="wsm">${CS.tlogo(L, g.h, 24)}<span>${esc(CS.tname(L, g.h))}</span><b class="${g.hs > g.as ? 'gold' : 'dim'}">${g.hs}</b></div><div class="wsm">${CS.tlogo(L, g.a, 24)}<span>${esc(CS.tname(L, g.a))}</span><b class="${g.as > g.hs ? 'gold' : 'dim'}">${g.as}</b></div><button class="btn xs" data-act="gameForm" data-gid="${g.id}">Fix</button></div>`;
+    const inp = s => `<input type="number" inputmode="numeric" min="0" class="wsi" data-ws="${g.id}" data-s="${s}" placeholder="sim">`;
+    return `<div class="ws"><div class="wsm">${CS.tlogo(L, g.h, 24)}<span>${esc(CS.tname(L, g.h))}</span>${inp('h')}</div><div class="wsm">${CS.tlogo(L, g.a, 24)}<span>${esc(CS.tname(L, g.a))}</span>${inp('a')}</div><button class="btn xs cyan" data-act="gameForm" data-gid="${g.id}">+ Stats</button></div>`;
   };
+  CS.weekSheet = keep => {
+    const L = CS.L, c = CS.curGames(L); if (!c) return;
+    CS.modal(`<div class="h">${esc(c.title)} scores</div>
+      <div class="note sp">Type the final score of each game you played. Leave a box empty and it gets simulated. Tap + Stats if you want to add player stats.</div>
+      <div class="col sp">${c.games.map(g => wsRow(L, g)).join('')}</div>
+      <div class="row sp"><button class="btn" data-act="closeModal">Close</button><button class="btn gold grow" data-act="saveWeek">Save scores</button></div>
+      <button class="btn block sp" data-act="simBlankWeek">Sim the games I left empty</button>`);
+    if (keep) document.querySelectorAll('#modal [data-ws]').forEach(el => { const k = keep[el.dataset.ws]; if (k && k[el.dataset.s] != null) el.value = k[el.dataset.s]; });
+  };
+  const readWs = () => { const m = {}; document.querySelectorAll('#modal [data-ws]').forEach(el => { (m[el.dataset.ws] = m[el.dataset.ws] || {})[el.dataset.s] = el.value; }); return m; };
+  CS.act.weekSheet = () => CS.weekSheet();
+  CS.act.saveWeek = () => {
+    const L = CS.L, c = CS.curGames(L), typed = readWs(), bad = []; let n = 0;
+    c.games.filter(g => !g.played).forEach(g => {
+      const t = typed[g.id] || {}, h = t.h === '' || t.h == null ? null : Math.round(+t.h), a = t.a === '' || t.a == null ? null : Math.round(+t.a);
+      if (h == null && a == null) return;
+      if ((h != null && !(h >= 0)) || (a != null && !(a >= 0))) return bad.push(CS.tname(L, g.h) + ' vs ' + CS.tname(L, g.a) + ': scores must be 0 or more.');
+      const r = CS.saveGameResult(L, g, { hs: h, as: a }, false);
+      if (r.ok) n++; else bad.push(CS.tname(L, g.h) + ' vs ' + CS.tname(L, g.a) + ': ' + (r.issues ? r.issues.join(' ') : r.msg));
+    });
+    CS.save();
+    if (bad.length) { CS.render(); CS.modal(`<div class="h red">Some games did not save</div>${bad.map(b => `<div class="issue sp">${esc(b)}</div>`).join('')}<div class="note sp">${n ? n + ' game' + (n > 1 ? 's' : '') + ' saved.' : ''}</div><button class="btn gold block sp" data-act="weekSheet">Back to the scores</button>`); return; }
+    if (!n) return CS.toast('Type at least one score first.', true);
+    CS.closeModal(); CS.render(); CS.toast(n + ' game' + (n > 1 ? 's' : '') + ' saved.');
+    const nc = CS.curGames(CS.L); if (nc && nc.title !== c.title) CS.toast(c.title + ' is done. On to ' + nc.title + '.');
+  };
+  CS.act.simBlankWeek = () => {
+    const L = CS.L, c = CS.curGames(L), typed = readWs(); let n = 0;
+    c.games.filter(g => !g.played).forEach(g => { const t = typed[g.id] || {}; if ((t.h || '') === '' && (t.a || '') === '') { CS.playGame(L, g, c.po); n++; } });
+    CS.closeModal(); CS.commit(); CS.toast(n ? n + ' game' + (n > 1 ? 's' : '') + ' simulated.' : 'No empty games to sim.');
+  };
+
+  // ---------- game form: score + the key players' stats ----------
+  CS.findGame = (L, gid) => CS.allGames(L).find(g => g.id === gid) || null;
+  const teamForm = (L, g, tid) => {
+    const prev = (g.played && g.inp && g.inp.vals) || {}, boxL = g.played && g.box && g.box[tid];
+    const rows = boxL ? boxL.map(l => ({ id: l.pid, name: l.name, pos: l.pos, ln: l })) : CS.gameCast(L, tid).map(p => ({ id: p.id, name: p.name, pos: p.pos, ovr: p.ovr }));
+    return `<div class="panel flat" style="margin-top:12px"><div class="row">${CS.tlogo(L, tid, 30)}<div class="grow"><div class="tname" style="font-size:17px">${esc(CS.tname(L, tid))}</div><div class="lbl">Player stats</div></div></div>
+      ${rows.map(r => `<div class="sf"><div class="sfn"><b>${esc(r.name)}</b> <span class="dim small">${r.pos}</span></div><div class="sfi">${CS.FIELDS[r.pos].map(([k, lab]) => {
+        const v = prev[r.id] && prev[r.id][k] !== undefined ? prev[r.id][k] : '', ph = r.ln && (r.ln.sim || []).includes(k) ? r.ln.st[k] : 'sim';
+        return `<label class="f2"><span>${lab}</span><input type="number" inputmode="numeric" min="0" data-sp="${r.id}" data-k="${k}" value="${v}" placeholder="${ph}"></label>`;
+      }).join('')}</div></div>`).join('') || '<div class="note">No starters on this team.</div>'}</div>`;
+  };
+  CS.gameForm = (gid, pre) => {
+    const L = CS.L, g = CS.findGame(L, gid); if (!g) return;
+    pre = pre || {};
+    const inp = g.played && g.inp ? g.inp : {}, hv = pre.h != null ? pre.h : (inp.hs == null ? '' : inp.hs), av = pre.a != null ? pre.a : (inp.as == null ? '' : inp.as);
+    CS._gf = gid;
+    CS.modal(`<div class="h">${g.played ? 'Fix the result' : 'Enter the result'}</div>
+      <div class="note sp">Fill in what you know. <b>Anything you leave blank gets simulated</b> so it all adds up to the score.</div>
+      <div class="gfs sp"><div class="gft">${CS.tlogo(L, g.h, 36)}<span>${esc(CS.tname(L, g.h))}</span></div><input type="number" inputmode="numeric" min="0" id="gfH" placeholder="${g.played ? g.hs : 'sim'}" value="${hv}"><span class="faint">-</span><input type="number" inputmode="numeric" min="0" id="gfA" placeholder="${g.played ? g.as : 'sim'}" value="${av}"><div class="gft r"><span>${esc(CS.tname(L, g.a))}</span>${CS.tlogo(L, g.a, 36)}</div></div>
+      ${g.po ? '' : `<label class="row sp"><input type="checkbox" id="gfOt" ${inp.ot ? 'checked' : ''}><span class="small">Went to overtime</span></label>`}
+      ${teamForm(L, g, g.h)}${teamForm(L, g, g.a)}
+      <div class="row sp"><button class="btn" data-act="formCancel">Cancel</button><button class="btn gold grow" data-act="saveGame">${g.played ? 'Save changes' : 'Save result'}</button></div>
+      ${g.played ? '' : `<button class="btn block sp" data-act="playOne" data-gid="${g.id}">Just sim this game</button>`}`);
+  };
+  CS.act.gameForm = d => {
+    const h = document.querySelector(`#modal [data-ws="${d.gid}"][data-s=h]`), a = document.querySelector(`#modal [data-ws="${d.gid}"][data-s=a]`);
+    CS._wsKeep = h ? readWs() : null;
+    CS.gameForm(d.gid, h ? { h: h.value, a: a.value } : null);
+  };
+  CS.act.formCancel = () => { const k = CS._wsKeep; CS._wsKeep = null; if (k) CS.weekSheet(k); else CS.closeModal(); };
+  const backToSheet = () => { const k = CS._wsKeep; CS._wsKeep = null; if (k && CS.curGames(CS.L)) CS.weekSheet(k); };
+  CS.act.saveGame = () => {
+    const L = CS.L, g = CS.findGame(L, CS._gf), num = id => { const v = document.getElementById(id).value; return v === '' ? null : Math.round(+v); };
+    const hs = num('gfH'), as = num('gfA'), vals = {}; let bad = false;
+    if ((hs != null && !(hs >= 0)) || (as != null && !(as >= 0))) return CS.toast('Scores must be 0 or more.', true);
+    document.querySelectorAll('#modal [data-sp]').forEach(el => { if (el.value === '') return; const v = Math.round(+el.value); if (!(v >= 0)) { bad = true; return; } (vals[el.dataset.sp] = vals[el.dataset.sp] || {})[el.dataset.k] = v; });
+    if (bad) return CS.toast('Stats must be 0 or more.', true);
+    const ot = !!(document.getElementById('gfOt') && document.getElementById('gfOt').checked);
+    const inp = { hs, as, ot, vals };
+    if (g.played && JSON.stringify(inp) === JSON.stringify({ hs: g.inp ? g.inp.hs : null, as: g.inp ? g.inp.as : null, ot: g.inp ? !!g.inp.ot : false, vals: g.inp ? g.inp.vals : {} })) { CS.closeModal(); backToSheet(); return CS.toast('Nothing changed.'); }
+    CS.closeModal();
+    if (CS.guard(CS.saveGameResult(L, g, inp, false), f => CS.saveGameResult(L, g, inp, f), 'Result saved.')) backToSheet();
+  };
+  CS.act.playOne = d => { const L = CS.L, g = CS.findGame(L, d.gid); CS.closeModal(); CS.playGame(L, g, !!g.po); CS.commit(); if (CS._wsKeep) backToSheet(); else CS.gameModal(g.id); };
+
+  // ---------- game modal: box score ----------
   CS.gameModal = gid => {
     const L = CS.L, g = CS.findGame(L, gid); if (!g) return;
     const rh = CS.rate(L, g.h), ra = CS.rate(L, g.a);
-    CS.modal(`<div class="game" style="cursor:default">${`<div class="tm">${CS.tlogo(L, g.h, 40)}<span>${esc(CS.tname(L, g.h))}</span></div>`}
+    const boxTeam = tid => g.box && g.box[tid] ? `<div class="lbl sp">${esc(CS.tname(L, tid))}</div>${g.box[tid].map(l => `<div class="sum" style="grid-template-columns:1fr auto"><span><b>${esc(l.name)}</b> <span class="dim">${l.pos}</span></span><span class="right dim small">${CS.boxLine(l)}</span></div>`).join('')}` : '';
+    const hasSim = g.box && Object.values(g.box).some(b => b.some(l => (l.sim || []).length));
+    CS.modal(`<div class="game" style="cursor:default"><div class="tm">${CS.tlogo(L, g.h, 40)}<span>${esc(CS.tname(L, g.h))}</span></div>
       <div class="sc">${g.played ? `${g.hs} <span class="faint">-</span> ${g.as}<small>${g.ot ? 'FINAL/OT' : 'FINAL'}</small>` : '<span class="faint">vs</span>'}</div>
       <div class="tm a"><span>${esc(CS.tname(L, g.a))}</span>${CS.tlogo(L, g.a, 40)}</div></div>
       <div class="small dim center sp">OVR ${rh.ovr} vs ${ra.ovr} · offense ${Math.round(rh.off)} / ${Math.round(ra.off)} · defense ${Math.round(rh.def)} / ${Math.round(ra.def)}</div>
-      ${g.played && g.sum && g.sum.length ? `<div class="lbl sp">Scoring</div>${g.sum.map(s => `<div class="sum"><span class="dim">${s.q}</span><span><b>${esc(CS.tname(L, s.tid))}</b> ${esc(s.txt)}</span><span class="right nowrap dim">${s.h}-${s.a}</span></div>`).join('')}` : (g.played ? '<div class="note sp">Score entered by hand.</div>' : '')}
-      <div class="row sp">${g.played ? '' : `<button class="btn gold grow" data-act="playOne" data-gid="${g.id}">Play this game</button>`}<button class="btn grow" data-act="editScore" data-gid="${g.id}">${g.played ? 'Fix score' : 'Enter score'}</button><button class="btn" data-act="closeModal">Close</button></div>`);
+      ${g.played && g.sum && g.sum.length ? `<div class="lbl sp">Scoring</div>${g.sum.map(s => `<div class="sum"><span class="dim">${s.q}</span><span><b>${esc(CS.tname(L, s.tid))}</b> ${esc(s.txt)}</span><span class="right nowrap dim">${s.h}-${s.a}</span></div>`).join('')}` : ''}
+      ${g.played ? boxTeam(g.h) + boxTeam(g.a) : ''}
+      ${g.played && g.src === 'entered' ? '<div class="note sp">Score entered by the league.</div>' : ''}${hasSim ? '<div class="note sp">* simulated to fit the score</div>' : ''}
+      <div class="row sp">${g.played ? '' : `<button class="btn gold grow" data-act="gameForm" data-gid="${g.id}">Enter result</button><button class="btn grow" data-act="playOne" data-gid="${g.id}">Sim it</button>`}${g.played ? `<button class="btn gold grow" data-act="gameForm" data-gid="${g.id}">Fix result</button>` : ''}<button class="btn" data-act="closeModal">Close</button></div>`);
   };
   CS.act.gameModal = d => CS.gameModal(d.gid);
-  CS.act.playOne = d => { const L = CS.L, g = CS.findGame(L, d.gid); CS.playGame(L, g, !!g.po); if (g.po) CS.afterPoGame(L); CS.commit(); CS.gameModal(g.id); };
-  CS.afterPoGame = L => { /* playoffs advance from the Sim round buttons */ };
-  CS.act.editScore = d => {
-    const L = CS.L, g = CS.findGame(L, d.gid);
-    CS.modal(`<div class="h">${g.played ? 'Fix' : 'Enter'} the score</div><div class="g2 sp"><label class="f">${esc(CS.tname(L, g.h))}<input type="number" id="esH" inputmode="numeric" value="${g.played ? g.hs : ''}"></label><label class="f">${esc(CS.tname(L, g.a))}<input type="number" id="esA" inputmode="numeric" value="${g.played ? g.as : ''}"></label></div>
-      <div class="note">Use this if you played a game for real. It won't add touchdowns to the stat leaders.</div>
-      <div class="row sp"><button class="btn block" data-act="closeModal">Cancel</button><button class="btn block gold" data-act="saveScore" data-gid="${g.id}">Save</button></div>`);
-  };
-  CS.act.saveScore = d => {
-    const L = CS.L, g = CS.findGame(L, d.gid), h = +document.getElementById('esH').value, a = +document.getElementById('esA').value;
-    if (!(h >= 0) || !(a >= 0) || document.getElementById('esH').value === '' || document.getElementById('esA').value === '') return CS.toast('Type both scores.', true);
-    if (g.po && h === a) return CS.toast('A playoff game needs a winner.', true);
-    g.hs = Math.round(h); g.as = Math.round(a); g.played = true; g.sum = []; g.ot = false;
-    CS.commit(); CS.closeModal(); CS.toast('Score saved.');
-  };
 
   // ---------- SEASON view ----------
   CS.views.season = L => {
@@ -101,15 +180,14 @@
       (po.champ ? `<div class="panel hero"><div class="row">${CS.tlogo(L, po.champ, 56)}<div><div class="lbl">Champions</div><div class="big cc9 gold">${esc(CS.tfull(L, po.champ))}</div></div></div></div>` : '');
   }
 
+  const BOARDS = [['py', 'Passing yards'], ['ptd', 'Pass TDs'], ['ru', 'Rushing yards'], ['rc', 'Receiving yards'], ['td', 'Touchdowns'], ['sck', 'Sacks'], ['dint', 'Interceptions']];
   function leadView(L) {
-    const board = (title, key, label) => {
-      const l = CS.leaders(L, key, 8);
-      return `<div class="panel"><div class="h">${title}</div>${l.map((p, i) => `<div class="row" style="padding:5px 0;border-bottom:1px solid #1d2331"><b class="cc9 dim" style="width:22px">${i + 1}</b><div class="grow"><b>${esc(p.name)}</b> <span class="dim small">${p.pos} · ${p.tid ? esc(CS.tname(L, p.tid)) : 'free agent'}</span></div><b class="cc9 gold" style="font-size:20px">${p.st[key]}</b></div>`).join('') || '<div class="note">Nobody yet. Play some games.</div>'}</div>`;
-    };
-    const st = CS.standings(L);
-    return board('Touchdowns', 'td') + board('Passing touchdowns', 'ptd') +
-      `<div class="panel"><div class="h">Team scoring</div><div class="tscroll"><table class="tbl"><tr><th>Team</th><th>Pts/G</th><th>Allowed/G</th></tr>${st.filter(r => r.gp).map(r => `<tr><td class="l">${CS.teamRow(L, r.tid)}</td><td>${(r.pf / r.gp).toFixed(1)}</td><td>${(r.pa / r.gp).toFixed(1)}</td></tr>`).join('')}</table></div></div>`;
+    const key = CS.ui.lead || 'py', l = CS.leaders(L, key, 10), name = (BOARDS.find(b => b[0] === key) || BOARDS[0])[1], st = CS.standings(L);
+    return `<div class="chips scroll sp">${BOARDS.map(b => `<span class="chip ${key === b[0] ? 'on' : ''}" data-act="leadKey" data-a="${b[0]}">${b[1]}</span>`).join('')}</div>
+      <div class="panel"><div class="h">${name}</div>${l.map((e, i) => `<div class="row" style="padding:6px 0;border-bottom:1px solid #1d2331"><b class="cc9 dim" style="width:22px">${i + 1}</b><div class="grow"><b>${esc(e.name)}</b> <span class="dim small">${e.pos} · ${e.tid ? esc(CS.tname(L, e.tid)) : 'free agent'} · ${e.g} G</span></div><b class="cc9 gold" style="font-size:22px">${e[key].toLocaleString('en-US')}</b></div>`).join('') || '<div class="note">Nobody yet. Enter some scores and stats first.</div>'}</div>
+      <div class="panel"><div class="h">Team scoring</div><div class="tscroll"><table class="tbl"><tr><th>Team</th><th>Pts/G</th><th>Allowed/G</th></tr>${st.filter(r => r.gp).map(r => `<tr><td class="l">${CS.teamRow(L, r.tid)}</td><td>${(r.pf / r.gp).toFixed(1)}</td><td>${(r.pa / r.gp).toFixed(1)}</td></tr>`).join('')}</table></div></div>`;
   }
+  CS.act.leadKey = d => { CS.ui.lead = d.a; CS.render(); };
 
   function histView(L) {
     if (!L.hist.length) return `<div class="panel"><div class="h">History</div><div class="note">Past seasons show up here after the first season finishes.</div></div>`;

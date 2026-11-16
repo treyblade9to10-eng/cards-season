@@ -227,7 +227,6 @@
   // ---------- season flow ----------
   CS.startSeason = L => {
     if (L.draft && L.draft.kind === 'future') L.year = L.draft.year;
-    L.players.forEach(p => { p.st = CS.blankStats(); });
     L.season = { year: L.year, weeks: CS.makeSchedule(L), po: null, champ: null };
     L.phase = 'season'; L.offseason = null;
     CS.ensurePicks(L);
@@ -250,10 +249,10 @@
     const champ = s.champ, final = po && po.rounds[po.rounds.length - 1].games[0];
     const runner = final ? (final.h === champ ? final.a : final.h) : null;
     const topTd = CS.leaders(L, 'td', 1)[0], topQb = CS.leaders(L, 'ptd', 1)[0];
-    L.hist.push({ year: L.year, champ, runner, table: st.map(r => ({ tid: r.tid, w: r.w, l: r.l, t: r.t, pf: r.pf, pa: r.pa })), seeds: po ? po.seeds : [], topTd: topTd ? { name: topTd.name, n: topTd.st.td } : null, topQb: topQb ? { name: topQb.name, n: topQb.st.ptd } : null, tidNames: Object.fromEntries(L.teams.map(t => [t.id, CS.tname(L, t.id)])) });
+    L.hist.push({ year: L.year, champ, runner, table: st.map(r => ({ tid: r.tid, w: r.w, l: r.l, t: r.t, pf: r.pf, pa: r.pa })), seeds: po ? po.seeds : [], topTd: topTd ? { name: topTd.name, n: topTd.td } : null, topQb: topQb ? { name: topQb.name, n: topQb.ptd } : null, tidNames: Object.fromEntries(L.teams.map(t => [t.id, CS.tname(L, t.id)])) });
     const report = [], retired = [];
+    Object.values(CS.statMap(L, true)).forEach(e => { const p = CS.byId(L, e.pid); if (!p) return; p.car = p.car || {}; CS.KEYS.concat(['g']).forEach(k => { p.car[k] = (p.car[k] || 0) + (e[k] || 0); }); });
     L.players.slice().forEach(p => {
-      if (p.st) { p.car = p.car || { td: 0, ptd: 0 }; p.car.td += p.st.td; p.car.ptd += p.st.ptd; }
       if (p.tid) p.yrs = Math.max(0, (p.yrs || 0) - 1);
       p.age += 1;
       if (L.settings.progress && p.pro) {

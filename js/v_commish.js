@@ -83,7 +83,7 @@
   };
   CS.act.delLeague = () => CS.confirm('Delete "' + CS.L.name + '"?', 'All teams, cards, contracts and history in this league are gone. Download a backup first if you might want it.', 'Delete forever', () => { CS.deleteLeague(CS.L.id); CS.go(''); }, true);
   CS.act.resetSeason = () => CS.confirm('Restart the season?', 'All games go back to unplayed.', 'Restart', () => {
-    const L = CS.L; L.players.forEach(p => { p.st = CS.blankStats(); }); L.season = { year: L.year, weeks: CS.makeSchedule(L), po: null, champ: null }; L.phase = 'season'; CS.log(L, 'The ' + L.year + ' season was restarted.'); CS.commit();
+    const L = CS.L; L.season = { year: L.year, weeks: CS.makeSchedule(L), po: null, champ: null }; L.phase = 'season'; CS.log(L, 'The ' + L.year + ' season was restarted.'); CS.commit();
   }, true);
   CS.act.movePick = () => {
     const L = CS.L, picks = L.picks.filter(k => !k.used).sort((a, b) => a.year - b.year || a.round - b.round || a.orig.localeCompare(b.orig));

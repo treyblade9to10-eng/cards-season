@@ -145,9 +145,9 @@
       <div class="g2 stack sp"><div class="col" style="gap:6px">${CS.rbar('OFF', R.off)}${CS.rbar('DEF', R.def)}${CS.rbar('OL', R.ol)}</div><div class="col" style="gap:6px">${CS.rbar('QB', R.qb)}${CS.rbar('KICK', R.k)}${CS.rbar('PUNT', R.p)}</div></div>
       <div class="note">${t.base ? `Base team: ${esc(CS.NFL[t.base.nfl].full)} (defense ${t.base.def}, offensive line ${t.base.ol}, kicker ${t.base.k}, punter ${t.base.p})` : 'No base team yet. Draft a QB to get one.'}</div>
       <div class="row"><div class="grow"><div class="lbl">Payroll ${money(pay)} of ${money(cap)}</div><div class="bd"><i style="width:${CS.clamp(pay / cap * 100, 0, 100)}%;background:${pay > cap ? 'var(--red)' : 'var(--cyan)'}"></i></div></div><button class="btn sm" data-act="editTeam" data-tid="${t.id}">Edit team</button><button class="btn sm cyan" data-act="tradeWith" data-tid="${t.id}">Trade</button></div></div>
-      <div class="panel"><div class="h">Starting lineup</div><div class="col" style="gap:8px">${slots.map(([s, p]) => p ? CS.pcard(L, p, { tags: tags(p), acts: acts(p, false) }) : CS.emptyCard(s)).join('')}</div></div>
+      <div class="panel"><div class="h">Starting lineup</div><div class="col" style="gap:8px">${slots.map(([s, p]) => p ? CS.pcard(L, p, { tags: tags(p), acts: acts(p, false), meta: CS.seasonLine(L, p) }) : CS.emptyCard(s)).join('')}</div></div>
       <div class="panel"><div class="h">Bench <small>${lu.bench.length} · roster ${CS.roster(L, t.id).length} of ${L.settings.maxRoster}</small></div>
-        <div class="col" style="gap:8px">${lu.bench.map(p => CS.pcard(L, p, { tags: tags(p), acts: acts(p, true) })).join('') || '<div class="note">No bench players.</div>'}</div></div>
+        <div class="col" style="gap:8px">${lu.bench.map(p => CS.pcard(L, p, { tags: tags(p), acts: acts(p, true), meta: CS.seasonLine(L, p) })).join('') || '<div class="note">No bench players.</div>'}</div></div>
       <div class="panel"><div class="h">Draft picks <small>${picks.length}</small></div><div class="chips">${picks.map(k => `<span class="pick">${esc(CS.pickLabel(L, k))}</span>`).join('') || '<span class="note">No picks.</span>'}</div></div>
       <button class="link center" data-act="lgo" data-a="teams">&larr; All teams</button>`;
   };

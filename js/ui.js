@@ -87,7 +87,7 @@
   const TABS = [['hub', 'Hub'], ['teams', 'Teams'], ['draft', 'Draft'], ['trades', 'Trades'], ['season', 'Season'], ['cards', 'Cards'], ['commish', 'Commish']];
   CS.render = keep => {
     const app = document.getElementById('app'), y = window.scrollY, r = CS.route();
-    let html = ''; CS.L = null;
+    let html = ''; CS.L = null; CS._sm = null;
     if (r.page === 'home') html = homeView();
     else if (r.page === 'new') html = newView();
     else {
