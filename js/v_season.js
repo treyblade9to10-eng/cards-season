@@ -85,7 +85,7 @@
     const prev = (g.played && g.inp && g.inp.vals) || {}, boxL = g.played && g.box && g.box[tid];
     const rows = boxL ? boxL.map(l => ({ id: l.pid, name: l.name, pos: l.pos, ln: l })) : CS.gameCast(L, tid).map(p => ({ id: p.id, name: p.name, pos: p.pos, ovr: p.ovr }));
     return `<div class="panel flat" style="margin-top:12px"><div class="row">${CS.tlogo(L, tid, 30)}<div class="grow"><div class="tname" style="font-size:17px">${esc(CS.tname(L, tid))}</div><div class="lbl">Player stats</div></div></div>
-      ${rows.map(r => `<div class="sf"><div class="sfn"><b>${esc(r.name)}</b> <span class="dim small">${r.pos}</span></div><div class="sfi">${CS.FIELDS[r.pos].map(([k, lab]) => {
+      ${rows.map(r => `<div class="sf"><div class="sfn"><b>${esc(r.name)}</b> <span class="dim small">${r.pos}</span></div><div class="sfi${r.pos === 'QB' ? ' q5' : ''}">${CS.FIELDS[r.pos].map(([k, lab]) => {
         const v = prev[r.id] && prev[r.id][k] !== undefined ? prev[r.id][k] : '', ph = r.ln && (r.ln.sim || []).includes(k) ? r.ln.st[k] : 'sim';
         return `<label class="f2"><span>${lab}</span><input type="number" inputmode="numeric" min="0" data-sp="${r.id}" data-k="${k}" value="${v}" placeholder="${ph}"></label>`;
       }).join('')}</div></div>`).join('') || '<div class="note">No starters on this team.</div>'}</div>`;

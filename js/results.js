@@ -8,7 +8,7 @@
 
   // the stat boxes asked for each position
   CS.FIELDS = {
-    QB: [['py', 'Pass yds'], ['ptd', 'Pass TD'], ['pint', 'INT']],
+    QB: [['py', 'Pass yds'], ['ptd', 'Pass TD'], ['pint', 'INT'], ['ru', 'Rush yds'], ['rutd', 'Rush TD']],
     RB: [['ru', 'Rush yds'], ['rutd', 'Rush TD'], ['rc', 'Rec yds'], ['rctd', 'Rec TD']],
     WR: [['rc', 'Rec yds'], ['rctd', 'Rec TD']],
     TE: [['rc', 'Rec yds'], ['rctd', 'Rec TD']],
@@ -41,13 +41,15 @@
     const cast = CS.gameCast(L, tid), by = pos => cast.find(p => p.pos === pos);
     const get = (p, k) => p && vals[p.id] ? vals[p.id][k] : undefined;
     const qb = by('QB'), rb = by('RB'), def = by('DEF'), recv = cast.filter(p => p.pos === 'WR' || p.pos === 'TE' || p.pos === 'RB');
-    const ptdE = get(qb, 'ptd'), rutdE = get(rb, 'rutd'), dE = get(def, 'dtd');
+    const ptdE = get(qb, 'ptd'), dE = get(def, 'dtd');
+    const rbRu = get(rb, 'rutd'), qbRu = get(qb, 'rutd'), rutdMin = (rbRu || 0) + (qbRu || 0);
+    const rutdE = (rb || qb) && (!rb || rbRu !== undefined) && (!qb || qbRu !== undefined) ? rutdMin : undefined; // team rushing TDs, known only if every runner was filled in
     const recEnt = sum(recv, p => get(p, 'rctd') || 0);
-    const ptdMin = Math.max(ptdE || 0, recEnt), tMin = ptdMin + (rutdE || 0) + (dE || 0);
+    const ptdMin = Math.max(ptdE || 0, recEnt), tMin = ptdMin + rutdMin + (dE || 0);
     let tIn = null; const problems = [];
     if (ptdE !== undefined && rutdE !== undefined) { const base = ptdMin + rutdE + (dE || 0); tIn = [base, base + 1]; }
     if (ptdE !== undefined && recEnt > ptdE) problems.push('the receivers have ' + recEnt + ' TD catches but the QB only has ' + ptdE + ' passing TD' + (ptdE === 1 ? '' : 's') + '.');
-    return { cast, get, qb, rb, def, recv, ptdE, rutdE, dE, ptdMin, tMin, tIn, problems };
+    return { cast, get, qb, rb, def, recv, ptdE, rutdE, rutdMin, dE, ptdMin, tMin, tIn, problems };
   }
 
   // ---------- phase 1: touchdowns, yards, runs for one team ----------
@@ -61,17 +63,21 @@
     let d;
     if (def && !blank(def, 'dtd')) d = out[def.id].dtd;
     else if (E.ptdE !== undefined && E.rutdE !== undefined) d = Math.max(0, t - E.ptdMin - E.rutdE);
-    else d = Math.min(binom(t, .05), Math.max(0, t - E.ptdMin - (E.rutdE || 0)));
+    else d = Math.min(binom(t, .05), Math.max(0, t - E.ptdMin - E.rutdMin));
     const o = Math.max(0, t - d);
     if (def && blank(def, 'dtd')) put(def, 'dtd', d, true);
     // passing / rushing TD split
     let ptd, rutd;
     if (E.ptdE !== undefined && E.rutdE !== undefined) { ptd = E.ptdE; rutd = E.rutdE; }
-    else if (E.ptdE !== undefined) { ptd = E.ptdE; rutd = Math.max(E.rutdE || 0, o - ptd); }
+    else if (E.ptdE !== undefined) { ptd = E.ptdE; rutd = Math.max(E.rutdMin, o - ptd); }
     else if (E.rutdE !== undefined) { rutd = E.rutdE; ptd = Math.max(E.ptdMin, o - rutd); }
-    else { const pp = clamp(.58 + (R.qb - 80) * .004, .35, .8); ptd = clamp(binom(o, pp), E.ptdMin, Math.max(E.ptdMin, o)); rutd = Math.max(0, o - ptd); }
+    else { const pp = clamp(.58 + (R.qb - 80) * .004, .35, .8); ptd = clamp(binom(o, pp), E.ptdMin, Math.max(E.ptdMin, o - E.rutdMin)); rutd = Math.max(0, o - ptd); }
     if (qb && blank(qb, 'ptd')) put(qb, 'ptd', ptd, true);
-    if (rb && blank(rb, 'rutd')) put(rb, 'rutd', rutd, true);
+    // rushing TDs: split between the RB and the QB (a QB keeps about 1 in 6 on his own)
+    const runners = [rb, qb].filter(Boolean), blankR = runners.filter(p => blank(p, 'rutd'));
+    let rleft = Math.max(0, rutd - sum(runners.filter(p => !blankR.includes(p)), p => out[p.id].rutd));
+    if (blankR.length === 2) { const q = binom(rleft, .17); put(qb, 'rutd', q, true); put(rb, 'rutd', rleft - q, true); }
+    else if (blankR.length === 1) put(blankR[0], 'rutd', rleft, true);
     // who caught the TDs
     const wrIdx = p => E.cast.filter(x => x.pos === 'WR').indexOf(p);
     const rw = p => (p.pos === 'WR' ? [.27, .21, .16][wrIdx(p)] || .14 : p.pos === 'TE' ? .15 : .08) * Math.pow(p.ovr / 80, 2);
@@ -93,9 +99,12 @@
     const left = Math.max(0, py - entRc - floor), wts = blankRc.map(p => rw(p) * (.6 + .8 * CS.rnd())), wt = sum(wts) || 1;
     blankRc.forEach((p, i) => put(p, 'rc', sum(tdY[p.id]) + Math.round(left * wts[i] / wt), true));
     // rushing
-    const runY = Array.from({ length: rutd }, () => randInt(1, 30));
-    if (rb && blank(rb, 'ru')) put(rb, 'ru', Math.max(sum(runY) + 4, Math.round(52 + (R.rb - 80) * 1.4 + 14 * rutd + (P - 20) * .9 + gauss() * 24)), true);
-    return { tid, E, out, sim, put, blank, d, ptd, rutd, tdY, runY, dec, R };
+    const runs = [];
+    runners.forEach(p => { for (let i = 0; i < (out[p.id].rutd || 0); i++) runs.push({ p, y: randInt(1, p.pos === 'QB' ? 18 : 30) }); });
+    const ry = p => sum(runs.filter(r => r.p === p), r => r.y);
+    if (rb && blank(rb, 'ru')) put(rb, 'ru', Math.max(ry(rb) + 4, Math.round(52 + (R.rb - 80) * 1.4 + 14 * (out[rb.id].rutd || 0) + (P - 20) * .9 + gauss() * 24)), true);
+    if (qb && blank(qb, 'ru')) put(qb, 'ru', Math.max(ry(qb) + (out[qb.id].rutd ? 2 : 0), Math.round(15 + 10 * (out[qb.id].rutd || 0) + gauss() * 13)), true);
+    return { tid, E, out, sim, put, blank, d, ptd, rutd, tdY, runs, dec, R };
   }
 
   // ---------- phase 2: turnovers + sacks (needs both teams) ----------
@@ -117,7 +126,7 @@
   function events(L, T) {
     const { E, out, dec } = T, ev = [], qn = E.qb ? E.qb.name : 'Pass';
     E.recv.forEach(p => (T.tdY[p.id] || []).forEach(y => ev.push({ txt: qn + ' to ' + p.name + ', ' + y + ' yd TD', td: 1 })));
-    T.runY.forEach(y => ev.push({ txt: (E.rb ? E.rb.name : 'Run') + ' ' + y + ' yd run TD', td: 1 }));
+    T.runs.forEach(r => ev.push({ txt: r.p.name + ' ' + r.y + ' yd run TD', td: 1 }));
     for (let i = 0; i < T.d; i++) ev.push({ txt: (E.def ? E.def.name : 'The defense') + ' interception return TD', td: 1 });
     if (ev.length !== dec.t) return null;
     CS.shuffle(ev.map((e, i) => i)).slice(0, dec.m).forEach(i => { ev[i].miss = 1; });
@@ -222,7 +231,7 @@
   const f = (v, s) => v.toLocaleString('en-US') + (s || '');
   CS.seasonLine = (L, p) => {
     const e = CS.statMap(L)[p.id]; if (!e || !e.g) return '';
-    if (p.pos === 'QB') return f(e.py) + ' yds, ' + e.ptd + ' TD, ' + e.pint + ' INT';
+    if (p.pos === 'QB') return f(e.py) + ' yds, ' + e.ptd + ' TD, ' + e.pint + ' INT' + (e.ru || e.rutd ? ', ' + e.ru + ' rush yds' + (e.rutd ? ', ' + e.rutd + ' rush TD' : '') : '');
     if (p.pos === 'RB') return f(e.ru) + ' rush yds, ' + e.rutd + ' TD, ' + f(e.rc) + ' rec';
     if (p.pos === 'DEF') return e.sck + ' sacks, ' + e.dint + ' INT' + (e.dtd ? ', ' + e.dtd + ' TD' : '');
     return f(e.rc) + ' rec yds, ' + e.rctd + ' TD';
@@ -230,7 +239,7 @@
   // one line of a box score; simulated numbers get a * so everyone knows what was typed vs made up
   CS.boxLine = ln => {
     const v = k => ln.st[k] + ((ln.sim || []).includes(k) ? '*' : '');
-    if (ln.pos === 'QB') return v('py') + ' yds, ' + v('ptd') + ' TD, ' + v('pint') + ' INT';
+    if (ln.pos === 'QB') return v('py') + ' yds, ' + v('ptd') + ' TD, ' + v('pint') + ' INT' + (ln.st.ru || ln.st.rutd ? ', ' + v('ru') + ' rush yds' + (ln.st.rutd ? ', ' + v('rutd') + ' rush TD' : '') : '');
     if (ln.pos === 'RB') return v('ru') + ' rush yds, ' + v('rutd') + ' TD, ' + v('rc') + ' rec yds' + (ln.st.rctd ? ', ' + v('rctd') + ' rec TD' : '');
     if (ln.pos === 'DEF') return v('sck') + ' sacks, ' + v('dint') + ' INT' + (ln.st.dtd ? ', ' + v('dtd') + ' TD' : '');
     return v('rc') + ' rec yds, ' + v('rctd') + ' TD';
