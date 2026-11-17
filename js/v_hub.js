@@ -119,6 +119,16 @@
     return `<div class="panel"><div class="h">Champions</div>${L.hist.slice().reverse().map(h => `<div class="row" style="padding:5px 0">${CS.tlogo(L, h.champ, 28)}<div class="grow"><b>${h.year}</b> ${esc(h.tidNames[h.champ] || '')}</div><span class="dim small">${h.topTd ? esc(h.topTd.name) + ' ' + h.topTd.n + ' TD' : ''}</span></div>`).join('')}</div>`;
   }
 
+  // ---------- cap breakdown bar ----------
+  CS.capBar = (L, tid) => {
+    const t = CS.team(L, tid), b = CS.baseCost(t), cards = CS.cardPay(L, tid), cap = L.settings.cap, pay = CS.r1(cards + b.total), sp = CS.r1(cap - pay);
+    const segs = [['Cards', cards, 'var(--gold)'], ['Defense', b.def, 'var(--red)'], ['O-line', b.ol, 'var(--cyan)'], ['K + P', CS.r1(b.k + b.p), 'var(--purple)']];
+    const tot = Math.max(cap, pay);
+    return `<div class="capbar"><div class="row"><div class="lbl grow">Payroll ${money(pay)} of ${money(cap)}</div><b class="cc9 ${sp < 0 ? 'red' : 'green'}" style="font-size:18px">${sp < 0 ? money(-sp) + ' over' : money(sp) + ' space'}</b></div>
+      <div class="cb">${segs.map(s => `<i style="width:${s[1] / tot * 100}%;background:${s[2]}"></i>`).join('')}${pay > cap ? `<em style="left:${cap / tot * 100}%"></em>` : ''}</div>
+      <div class="cbk">${segs.map(s => `<span><i style="background:${s[2]}"></i>${s[0]} ${money(s[1])}</span>`).join('')}</div></div>`;
+  };
+
   // ---------- TEAMS ----------
   CS.views.teams = L => {
     const sort = CS.ui.teamSort, rows = L.teams.map(t => ({ t, r: CS.rate(L, t.id), st: CS.standings(L).find(x => x.tid === t.id) }));
@@ -126,7 +136,7 @@
     return `<div class="chips sp">${[['rec', 'Record'], ['ovr', 'Rating'], ['cap', 'Cap space'], ['mgr', 'Name']].map(c => `<span class="chip ${sort === c[0] ? 'on' : ''}" data-act="teamSort" data-a="${c[0]}">${c[1]}</span>`).join('')}</div>
       <div class="col sp">${rows.map(({ t, r, st }) => { const qb = CS.lineup(L, t.id).QB; return `<div class="tt" style="--tc:${CS.tcolor(L, t.id)}" data-act="openTeam" data-tid="${t.id}">${CS.tlogo(L, t.id, 48)}
         <div class="grow"><div class="tname">${esc(CS.tfull(L, t.id))}</div><div class="mgr">${esc(t.mgr)}${qb ? ' · QB ' + esc(qb.name) : ' · no QB yet'}</div>
-        <div class="small dim">${L.season ? 'Record ' + rec(L, t.id) + ' · ' : ''}Cap space ${money(CS.capSpace(L, t.id))} · ${CS.roster(L, t.id).length} players</div></div>
+        <div class="small dim">${L.season ? 'Record ' + rec(L, t.id) + ' · ' : ''}<span class="${CS.capSpace(L, t.id) < 0 ? 'red' : ''}">Cap space ${money(CS.capSpace(L, t.id))}</span> · ${CS.roster(L, t.id).length} players</div></div>
         <div class="center"><div class="big-ovr ${CS.tier(r.ovr)}"><b>${r.ovr}</b></div><div class="lbl">OVR</div></div></div>`; }).join('')}</div>`;
   };
   CS.act.teamSort = d => { CS.ui.teamSort = d.a; CS.render(); };
@@ -144,7 +154,7 @@
         <div class="center"><div class="big-ovr ${CS.tier(R.ovr)}"><b>${R.ovr}</b></div><div class="lbl">Team OVR</div></div></div>
       <div class="g2 stack sp"><div class="col" style="gap:6px">${CS.rbar('OFF', R.off)}${CS.rbar('DEF', R.def)}${CS.rbar('OL', R.ol)}</div><div class="col" style="gap:6px">${CS.rbar('QB', R.qb)}${CS.rbar('KICK', R.k)}${CS.rbar('PUNT', R.p)}</div></div>
       <div class="note">${t.base ? `Base team: ${esc(CS.NFL[t.base.nfl].full)} (defense ${t.base.def}, offensive line ${t.base.ol}, kicker ${t.base.k}, punter ${t.base.p})` : 'No base team yet. Draft a QB to get one.'}</div>
-      <div class="row"><div class="grow"><div class="lbl">Payroll ${money(pay)} of ${money(cap)}</div><div class="bd"><i style="width:${CS.clamp(pay / cap * 100, 0, 100)}%;background:${pay > cap ? 'var(--red)' : 'var(--cyan)'}"></i></div></div><button class="btn sm" data-act="editTeam" data-tid="${t.id}">Edit team</button><button class="btn sm cyan" data-act="tradeWith" data-tid="${t.id}">Trade</button></div></div>
+      ${CS.capBar(L, t.id)}<div class="row"><button class="btn sm" data-act="editTeam" data-tid="${t.id}">Edit team</button><button class="btn sm cyan" data-act="tradeWith" data-tid="${t.id}">Trade</button></div></div>
       <div class="panel"><div class="h">Starting lineup</div><div class="col" style="gap:8px">${slots.map(([s, p]) => p ? CS.pcard(L, p, { tags: tags(p), acts: acts(p, false), meta: CS.seasonLine(L, p) }) : CS.emptyCard(s)).join('')}</div></div>
       <div class="panel"><div class="h">Bench <small>${lu.bench.length} · roster ${CS.roster(L, t.id).length} of ${L.settings.maxRoster}</small></div>
         <div class="col" style="gap:8px">${lu.bench.map(p => CS.pcard(L, p, { tags: tags(p), acts: acts(p, true), meta: CS.seasonLine(L, p) })).join('') || '<div class="note">No bench players.</div>'}</div></div>

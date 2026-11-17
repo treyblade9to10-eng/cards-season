@@ -48,7 +48,7 @@
   };
 
   // ---------- rules ----------
-  const SET = [['cap', 'Salary cap ($M)', 20, 500], ['maxRoster', 'Max roster size', 7, 30], ['fRounds', 'Rounds in future drafts', 1, 7], ['rookieYrs', 'Rookie contract (years)', 1, 6]];
+  const SET = [['cap', 'Salary cap ($M)', 50, 900], ['maxRoster', 'Max roster size', 7, 30], ['fRounds', 'Rounds in future drafts', 1, 7], ['rookieYrs', 'Rookie contract (years)', 1, 6]];
   function rules(L) {
     const s = L.settings, n = L.teams.length;
     const po = [0, 2, 4, 8, 16].filter(x => x === 0 || x <= n);

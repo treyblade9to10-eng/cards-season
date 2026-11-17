@@ -106,28 +106,40 @@
   };
 
   // ---------- home ----------
+  const FAN = [['WR', 96, '#c60c30', '#00338d', 'Deep threat'], ['QB', 99, '#ffc93c', '#7a5a00', 'Franchise QB'], ['DEF', 94, '#33c4ff', '#004c6d', 'Lockdown']];
+  const fanCard = (c, i) => `<div class="fc fc${i}" style="--a:${c[2]};--b:${c[3]}"><div class="fct"><b>${c[1]}</b><span>${c[0]}</span></div><div class="fcm"><svg viewBox="0 0 60 60"><circle cx="30" cy="22" r="11" fill="rgba(255,255,255,.85)"/><path d="M10 58c2-14 10-21 20-21s18 7 20 21z" fill="rgba(255,255,255,.85)"/></svg></div><div class="fcn">${c[4]}</div></div>`;
+  const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent), standalone = window.navigator.standalone || (window.matchMedia && matchMedia('(display-mode: standalone)').matches);
+  function leagueCard(L, big) {
+    const champ = L.hist.length ? L.hist[L.hist.length - 1] : null, st = L.season ? CS.standings(L) : null, top = st && st[0] && st[0].gp ? st[0] : null;
+    const logos = L.teams.filter(t => t.base).slice(0, 8).map(t => CS.nlogo(t.base.nfl, big ? 30 : 22)).join('');
+    return `<div class="lcard${big ? ' big' : ''}" data-act="openLeague" data-a="${L.id}">
+      <div class="grow">${big ? '<div class="lbl gold">Continue</div>' : ''}<div class="tname"${big ? ' style="font-size:28px"' : ''}>${esc(L.name)}</div>
+        <div class="mgr">${L.year} · ${L.teams.length} teams · <b class="gold">${esc(CS.phaseLabel(L))}</b>${top ? ' · 1st: ' + esc(CS.tname(L, top.tid)) + ' ' + top.w + '-' + top.l : ''}${champ ? ' · ' + champ.year + ' champs: ' + esc(champ.tidNames[champ.champ] || '') : ''}</div>
+        ${logos ? `<div class="lgrow">${logos}</div>` : ''}</div>
+      <svg width="20" height="20" viewBox="0 0 16 16"><path d="M6 2l6 6-6 6" fill="none" stroke="${big ? '#ffc93c' : '#8a93a6'}" stroke-width="2.4"/></svg></div>`;
+  }
   function homeView() {
     const ls = CS.db.order.map(id => CS.db.leagues[id]).filter(Boolean);
-    return `<div class="logo"><div class="a">Cards</div><div class="b">Season<span class="bar"></span></div></div>
-      <div class="tagline">Draft your real cards. Run the whole league.</div>
-      <div class="col sp">${ls.map(L => {
-        const champ = L.hist.length ? L.hist[L.hist.length - 1] : null;
-        return `<div class="lcard" data-act="openLeague" data-a="${L.id}"><div class="grow"><div class="tname">${esc(L.name)}</div>
-          <div class="mgr">${L.teams.length} teams · ${L.players.length} cards · ${L.year} · ${esc(CS.phaseLabel(L))}${champ ? ' · ' + champ.year + ' champs: ' + esc(champ.tidNames[champ.champ] || '') : ''}</div></div>
-          <svg width="18" height="18" viewBox="0 0 16 16"><path d="M6 2l6 6-6 6" fill="none" stroke="#8a93a6" stroke-width="2.4"/></svg></div>`;
-      }).join('')}</div>
-      <div class="col sp"><button class="btn gold block" data-act="goNew" style="font-size:20px;padding:13px">New league</button>
+    const hint = isIOS && !standalone && !localStorage.getItem('cs_nohint');
+    return `<div class="hero2${ls.length ? ' sm' : ''}"><div class="fan">${FAN.map(fanCard).join('')}</div>
+        <div class="logo"><div class="a">Cards</div><div class="b">Season<span class="bar"></span></div></div>
+        <div class="tagline">Draft your cards. Play the games. Run the league.</div></div>
+      ${ls.length ? `<div class="col sp">${leagueCard(ls[0], true)}${ls.slice(1).map(L => leagueCard(L, false)).join('')}</div>` :
+        `<div class="steps sp">${[['1', 'Draft', 'Your cards, the current NFL or all-time legends. QB first: his team is your base.'], ['2', 'Play', 'Play your games for real and type in the scores. Blanks get simulated.'], ['3', 'Run it', 'Contracts, a $300M cap, trades with picks, free agency, new seasons.']].map(s => `<div class="step"><b>${s[0]}</b><div><div class="cc9" style="font-size:19px">${s[1]}</div><div class="note">${s[2]}</div></div></div>`).join('')}</div>`}
+      <div class="col sp"><button class="btn gold block" data-act="goNew" style="font-size:21px;padding:14px">${ls.length ? 'Start another league' : 'Start a league'}</button>
       <div class="center"><span class="link" data-act="importLeague">Import a saved league file</span></div></div>
+      ${hint ? `<div class="panel flat inst"><div class="row"><img src="icons/icon-180.png" width="44" height="44" alt=""><div class="grow"><b>Put it on your home screen</b><div class="note">Tap the Share button, then "Add to Home Screen". It opens full screen like an app.</div></div><button class="btn xs" data-act="noHint">OK</button></div></div>` : ''}
       <div class="center faint small sp">Cards Season v${CS.VER} · saved on this device</div>
       <input type="file" id="impFile" accept=".json,application/json" style="display:none">`;
   }
+  CS.act.noHint = () => { localStorage.setItem('cs_nohint', '1'); CS.render(); };
   CS.act.openLeague = d => CS.go('l/' + d.a + '/hub');
-  CS.act.goNew = () => { const n = 6; CS.ui.nl = { name: 'Cards Season', n, mgrs: Array(16).fill(''), cap: 110, rounds: 2, copy: '', pool: 'own' }; CS.go('new'); };
+  CS.act.goNew = () => { const n = 6; CS.ui.nl = { name: 'Cards Season', n, mgrs: Array(16).fill(''), cap: 300, rounds: 2, copy: '', pool: 'own' }; CS.go('new'); };
   CS.act.importLeague = () => { const f = document.getElementById('impFile'); f.onchange = () => { const file = f.files[0]; if (!file) return; const rd = new FileReader(); rd.onload = () => { try { const L = CS.importLeague(rd.result); CS.toast('Imported ' + L.name); CS.render(); } catch (e) { CS.toast(e.message, true); } }; rd.readAsText(file); }; f.click(); };
 
   // ---------- new league ----------
   function newView() {
-    const s = CS.ui.nl || (CS.ui.nl = { name: 'Cards Season', n: 6, mgrs: Array(16).fill(''), cap: 110, rounds: 2, copy: '', pool: 'own' });
+    const s = CS.ui.nl || (CS.ui.nl = { name: 'Cards Season', n: 6, mgrs: Array(16).fill(''), cap: 300, rounds: 2, copy: '', pool: 'own' });
     const others = CS.db.order.map(id => CS.db.leagues[id]).filter(Boolean);
     const games = (s.n % 2 ? s.n - 1 : s.n - 1) * s.rounds;
     return `<div class="top"><a class="back" href="#/"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M10 2L4 8l6 6" fill="none" stroke="#eef1f7" stroke-width="2.4"/></svg></a><div class="ttl">New league</div></div>
@@ -148,10 +160,10 @@
   }
   CS.bind.nlName = v => { CS.ui.nl.name = v; };
   CS.bind.nlMgr = (v, el) => { CS.ui.nl.mgrs[+el.dataset.i] = v; };
-  CS.bind.nlCap = v => { CS.ui.nl.cap = Math.max(20, +v || 110); };
+  CS.bind.nlCap = v => { CS.ui.nl.cap = Math.max(50, +v || 300); };
   CS.bind.nlCopy = v => { CS.ui.nl.copy = v; };
   CS.act.nlN = d => { const s = CS.ui.nl; s.n = CS.clamp(s.n + +d.a, 2, 16); CS.render(); };
-  CS.act.nlPool = d => { const s = CS.ui.nl; s.pool = d.a; if (s.cap === 110 || s.cap === 150) s.cap = (d.a === 'all' || d.a === 'both') ? 150 : 110; CS.render(); };
+  CS.act.nlPool = d => { const s = CS.ui.nl; s.pool = d.a; if (s.cap === 300 || s.cap === 330) s.cap = (d.a === 'all' || d.a === 'both') ? 330 : 300; CS.render(); };
   CS.act.nlRounds = d => { CS.ui.nl.rounds = +d.a; CS.render(); };
   CS.act.createLeague = () => {
     const s = CS.ui.nl, mgrs = Array.from({ length: s.n }, (_, i) => CS.cleanName(s.mgrs[i]) || 'Player ' + (i + 1));
@@ -164,6 +176,7 @@
   // ---------- boot ----------
   CS.start = () => {
     CS.load();
+    let mig = 0; Object.values(CS.db.leagues).forEach(L => { if (CS.migrateMoney(L)) mig++; }); if (mig) CS.save();
     CS.onSaveError = () => CS.toast('Could not save: the browser storage is full.', true);
     document.addEventListener('click', e => {
       if (e.target.id === 'modal') return CS.closeModal();

@@ -17,7 +17,7 @@
     const mgrs = (o.mgrs || []).map(CS.cleanName).filter(Boolean);
     const L = {
       id: CS.uid(), v: 1, name: CS.cleanName(o.name) || 'Cards Season', year: CS.START_YEAR, startYear: CS.START_YEAR, phase: 'setup', created: Date.now(),
-      settings: { cap: o.cap || 110, maxRoster: 11, rounds: o.rounds || 2, playoffs: 0, fRounds: 3, rookieYrs: 3, progress: true, hfa: true },
+      money: 2, settings: { cap: o.cap || CS.CAP, maxRoster: 11, rounds: o.rounds || 2, playoffs: 0, fRounds: 3, rookieYrs: 3, progress: true, hfa: true },
       teams: [], players: [], picks: [], draftOrder: [], draft: null, season: null, hist: [], log: [], trades: [], offseason: null
     };
     mgrs.forEach((m, i) => L.teams.push({ id: 't' + (i + 1), mgr: m, nick: '', base: null, notes: '' }));

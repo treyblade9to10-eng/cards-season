@@ -1,6 +1,6 @@
 // CARDS SEASON core: constants, helpers, storage, rules (lineups, ratings, contracts, values).
 const CS = window.CS = window.CS || {};
-CS.VER = '1.2.1';
+CS.VER = '1.3.0';
 CS.KEY = 'cardsseason_v1';
 CS.POS = ['QB', 'RB', 'WR', 'TE', 'DEF'];
 CS.SLOTS = { QB: 1, RB: 1, WR: 3, TE: 1, DEF: 1 };
@@ -24,7 +24,7 @@ CS.pick = a => a[Math.floor(CS.rnd() * a.length)];
 CS.shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(CS.rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 CS.esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 CS.r1 = n => Math.round(n * 10) / 10;
-CS.money = n => '$' + CS.r1(n).toFixed(1) + 'M';
+CS.money = n => (n < 0 ? '-$' : '$') + Math.abs(CS.r1(n)).toFixed(1) + 'M';
 CS.ord = n => n + (['th', 'st', 'nd', 'rd'][(n % 100 > 10 && n % 100 < 14) ? 0 : (n % 10 < 4 ? n % 10 : 0)]);
 CS.sum = (a, f) => a.reduce((s, x) => s + (f ? f(x) : x), 0);
 
@@ -48,7 +48,7 @@ CS.makeBase = abbr => { const n = CS.NFL[abbr]; return { nfl: abbr, def: n.def, 
 
 // ---------- rosters ----------
 CS.roster = (L, tid) => L.players.filter(p => p.tid === tid);
-CS.payroll = (L, tid) => CS.r1(CS.sum(CS.roster(L, tid), p => p.sal || 0));
+CS.payroll = (L, tid) => CS.r1(CS.sum(CS.roster(L, tid), p => p.sal || 0) + CS.baseCost(CS.team(L, tid)).total);
 CS.capSpace = (L, tid) => CS.r1(L.settings.cap - CS.payroll(L, tid));
 CS.byId = (L, pid) => L.players.find(p => p.id === pid);
 CS.lineup = (L, tid) => {
@@ -97,16 +97,35 @@ CS.rate = (L, tid) => {
   return { off, def, st, ovr: Math.round(.46 * off + .42 * def + .12 * st), qb, rb, wr, te, ol: b.ol, dp, k: b.k, p: b.p, def0: b.def };
 };
 
-// ---------- contracts ----------
-const POS_PAY = { QB: 1.25, RB: .8, WR: .9, TE: .7, DEF: 1 };
+// ---------- contracts (2026 NFL money: cap $300M) ----------
+// what a 99 overall makes at each spot; the curve drops fast below 90
+const TOP_PAY = { QB: 56, WR: 37, TE: 19, RB: 17, DEF: 29, DL: 36, LB: 22, CB: 31, S: 21 };
+CS.CAP = 300;
 CS.askSal = p => {
-  const base = .6 + 26 * Math.pow(Math.max(p.ovr - 60, 0) / 39, 2.2);
-  const ageM = p.age <= 26 ? 1.05 : p.age <= 29 ? 1 : p.age <= 31 ? .88 : .7;
-  return CS.r1(Math.max(.5, base * (POS_PAY[p.pos] || 1) * ageM));
+  const top = TOP_PAY[p.pos === 'DEF' && p.sub ? p.sub : p.pos] || 25;
+  const frac = Math.pow(CS.clamp((p.ovr - 60) / 39, 0, 1), 1.6);
+  const ageM = p.age <= 26 ? 1.05 : p.age <= 29 ? 1 : p.age <= 31 ? .9 : p.age <= 33 ? .75 : .6;
+  return CS.r1(Math.max(.9, (.9 + (top - .9) * frac) * ageM));
 };
 CS.askYears = p => p.age <= 26 ? 4 : p.age <= 29 ? 3 : p.age <= 32 ? 2 : 1;
-CS.rookieSal = (p, L) => CS.r1(Math.max(.5, CS.askSal(p) * .45));
+// drafted players sign at market value; only young players (23 and under) get a cheaper rookie deal
+CS.rookieSal = (p, L) => CS.r1(Math.max(.9, CS.askSal(p) * (p.age <= 23 ? .6 : 1)));
 CS.minAccept = ask => CS.r1(ask * .9);
+// the base team (the rest of the defense, offensive line, kicker, punter) is paid out of the cap too
+CS.baseCost = t => {
+  const b = t && t.base; if (!b) return { def: 0, ol: 0, k: 0, p: 0, total: 0 };
+  const def = CS.r1(Math.max(28, 28 + (b.def - 70) * 3.4)), ol = CS.r1(Math.max(12, 12 + (b.ol - 70) * 2.4)), k = CS.r1(Math.max(1, 1 + (b.k - 70) * .3)), pp = CS.r1(Math.max(1, 1 + (b.p - 70) * .22));
+  return { def, ol, k, p: pp, total: CS.r1(def + ol + k + pp) };
+};
+CS.cardPay = (L, tid) => CS.r1(CS.sum(CS.roster(L, tid), p => p.sal || 0));
+// one-time update for leagues made before real money (keeps rosters, records, years left)
+CS.migrateMoney = L => {
+  if (L.money >= 2) return false;
+  const c = L.settings.cap; L.settings.cap = c <= 110 ? CS.CAP : c <= 150 ? 330 : Math.round(c * 2.7);
+  L.players.forEach(p => { if (p.tid) p.sal = CS.rookieSal(p, L); });
+  L.money = 2; CS.log(L, 'Contracts moved to real 2026 NFL money. Cap is now ' + CS.money(L.settings.cap) + ' and base teams (defense, line, kicker, punter) count against it.');
+  return true;
+};
 
 // ---------- trade values ----------
 const AGE_VAL = a => a <= 24 ? 1.25 : a <= 27 ? 1.1 : a <= 29 ? 1 : a <= 31 ? .8 : a <= 33 ? .6 : .4;
