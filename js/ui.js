@@ -173,6 +173,20 @@
     CS.ui.nl = null; CS.toast(s.pool === 'own' ? 'League created. Add your cards next.' : 'League created with ' + L.players.length + ' cards.'); CS.go('l/' + L.id + '/' + (s.pool === 'own' ? 'cards' : 'draft'));
   };
 
+  // ---------- auto update (home screen app keeps an old copy open, so check for a new version) ----------
+  let lastCheck = 0;
+  CS.checkUpdate = first => {
+    if (!first && Date.now() - lastCheck < 30000) return;
+    lastCheck = Date.now();
+    fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(r => r.ok ? r.json() : null).then(j => {
+      if (!j || !j.v || j.v === CS.VER) { sessionStorage.removeItem('cs_upd'); return; }
+      if (sessionStorage.getItem('cs_upd') === j.v) return; // already tried this version once, don't loop
+      if (document.getElementById('modal').classList.contains('on') || /INPUT|TEXTAREA|SELECT/.test((document.activeElement || {}).tagName || '')) { CS.toast('Update ready: v' + j.v + '. It installs next time you open the app.'); lastCheck = 0; return; }
+      sessionStorage.setItem('cs_upd', j.v); localStorage.setItem('cs_updated', j.v);
+      location.replace(location.pathname + '?u=' + j.v + location.hash);
+    }).catch(() => { });
+  };
+
   // ---------- boot ----------
   CS.start = () => {
     CS.load();
@@ -198,7 +212,11 @@
       if (e.key === 'Escape') CS.closeModal();
       if (e.key === 'Enter' && e.target.matches('[data-enter]')) { e.preventDefault(); const f = CS.act[e.target.dataset.enter]; if (f) f({}, e.target, e); }
     });
+    CS.checkUpdate(true);
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') CS.checkUpdate(false); });
+    window.addEventListener('pageshow', e => { if (e.persisted) CS.checkUpdate(false); });
     window.addEventListener('hashchange', () => { CS.closeModal(); CS.render(false); });
     CS.render(false);
+    const up = localStorage.getItem('cs_updated'); if (up && up === CS.VER) { localStorage.removeItem('cs_updated'); setTimeout(() => CS.toast('Updated to v' + CS.VER), 300); }
   };
 })();

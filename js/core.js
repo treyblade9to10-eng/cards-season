@@ -1,6 +1,6 @@
 // CARDS SEASON core: constants, helpers, storage, rules (lineups, ratings, contracts, values).
 const CS = window.CS = window.CS || {};
-CS.VER = '1.3.1';
+CS.VER = '1.3.2';
 CS.KEY = 'cardsseason_v1';
 CS.POS = ['QB', 'RB', 'WR', 'TE', 'DEF'];
 CS.SLOTS = { QB: 1, RB: 1, WR: 3, TE: 1, DEF: 1 };
