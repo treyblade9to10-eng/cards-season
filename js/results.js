@@ -8,13 +8,13 @@
 
   // the stat boxes asked for each position
   CS.FIELDS = {
-    QB: [['py', 'Pass yds'], ['ptd', 'Pass TD'], ['pint', 'INT'], ['ru', 'Rush yds'], ['rutd', 'Rush TD']],
+    QB: [['cmp', 'Comp'], ['att', 'Att'], ['py', 'Pass yds'], ['ptd', 'Pass TD'], ['pint', 'INT'], ['ru', 'Rush yds'], ['rutd', 'Rush TD']],
     RB: [['ru', 'Rush yds'], ['rutd', 'Rush TD'], ['rc', 'Rec yds'], ['rctd', 'Rec TD']],
     WR: [['rc', 'Rec yds'], ['rctd', 'Rec TD']],
     TE: [['rc', 'Rec yds'], ['rctd', 'Rec TD']],
     DEF: [['sck', 'Sacks'], ['dint', 'INT'], ['dtd', 'Def TD']]
   };
-  CS.KEYS = ['py', 'ptd', 'pint', 'ru', 'rutd', 'rc', 'rctd', 'sck', 'dint', 'dtd'];
+  CS.KEYS = ['cmp', 'att', 'py', 'ptd', 'pint', 'ru', 'rutd', 'rc', 'rctd', 'sck', 'dint', 'dtd'];
   CS.blankStats = () => ({});
   CS.gameCast = (L, tid) => { const lu = CS.lineup(L, tid); return [lu.QB, lu.RB, ...lu.WR, lu.TE, lu.DEF].filter(Boolean); };
 
@@ -48,6 +48,8 @@
     const ptdMin = Math.max(ptdE || 0, recEnt), tMin = ptdMin + rutdMin + (dE || 0);
     let tIn = null; const problems = [];
     if (ptdE !== undefined && rutdE !== undefined) { const base = ptdMin + rutdE + (dE || 0); tIn = [base, base + 1]; }
+    const cE = get(qb, 'cmp'), aE = get(qb, 'att');
+    if (cE !== undefined && aE !== undefined && cE > aE) problems.push('the QB has more completions (' + cE + ') than attempts (' + aE + ').');
     if (ptdE !== undefined && recEnt > ptdE) problems.push('the receivers have ' + recEnt + ' TD catches but the QB only has ' + ptdE + ' passing TD' + (ptdE === 1 ? '' : 's') + '.');
     return { cast, get, qb, rb, def, recv, ptdE, rutdE, rutdMin, dE, ptdMin, tMin, tIn, problems };
   }
@@ -104,6 +106,12 @@
     const ry = p => sum(runs.filter(r => r.p === p), r => r.y);
     if (rb && blank(rb, 'ru')) put(rb, 'ru', Math.max(ry(rb) + 4, Math.round(52 + (R.rb - 80) * 1.4 + 14 * (out[rb.id].rutd || 0) + (P - 20) * .9 + gauss() * 24)), true);
     if (qb && blank(qb, 'ru')) put(qb, 'ru', Math.max(ry(qb) + (out[qb.id].rutd ? 2 : 0), Math.round(15 + 10 * (out[qb.id].rutd || 0) + gauss() * 13)), true);
+    // completions / attempts from the passing yards
+    if (qb) {
+      const o2 = out[qb.id], yd = o2.py || 0;
+      if (blank(qb, 'att')) put(qb, 'att', Math.max(o2.cmp || 0, o2.ptd || 0, Math.round(clamp(yd / (7.1 + gauss() * .8), 8, 62))), true);
+      if (blank(qb, 'cmp')) put(qb, 'cmp', clamp(Math.round(o2.att * clamp(.62 + (R.qb - 80) * .006 + gauss() * .05, .42, .86)), Math.min(o2.ptd || 0, o2.att), o2.att), true);
+    }
     return { tid, E, out, sim, put, blank, d, ptd, rutd, tdY, runs, dec, R };
   }
 
@@ -224,14 +232,14 @@
         e.g++; Object.keys(ln.st).forEach(k => { e[k] += ln.st[k] || 0; });
       }));
     });
-    Object.values(m).forEach(e => { e.td = e.rutd + e.rctd + e.dtd; const p = CS.byId(L, e.pid); e.tid = p ? p.tid : null; e.name = p ? p.name : e.name; });
+    Object.values(m).forEach(e => { e.td = e.rutd + e.rctd + e.dtd; e.pct = e.att ? Math.round(e.cmp / e.att * 1000) / 10 : 0; const p = CS.byId(L, e.pid); e.tid = p ? p.tid : null; e.name = p ? p.name : e.name; });
     CS._sm = m; CS._smL = L; return m;
   };
-  CS.leaders = (L, key, n) => Object.values(CS.statMap(L)).filter(e => e[key] > 0).sort((a, b) => b[key] - a[key]).slice(0, n || 10);
+  CS.leaders = (L, key, n) => Object.values(CS.statMap(L)).filter(e => e[key] > 0 && (key !== 'pct' || e.att >= 20)).sort((a, b) => b[key] - a[key]).slice(0, n || 10);
   const f = (v, s) => v.toLocaleString('en-US') + (s || '');
   CS.seasonLine = (L, p) => {
     const e = CS.statMap(L)[p.id]; if (!e || !e.g) return '';
-    if (p.pos === 'QB') return f(e.py) + ' yds, ' + e.ptd + ' TD, ' + e.pint + ' INT' + (e.ru || e.rutd ? ', ' + e.ru + ' rush yds' + (e.rutd ? ', ' + e.rutd + ' rush TD' : '') : '');
+    if (p.pos === 'QB') return (e.att ? e.cmp + '/' + e.att + ' (' + e.pct + '%), ' : '') + f(e.py) + ' yds, ' + e.ptd + ' TD, ' + e.pint + ' INT' + (e.ru || e.rutd ? ', ' + e.ru + ' rush yds' + (e.rutd ? ', ' + e.rutd + ' rush TD' : '') : '');
     if (p.pos === 'RB') return f(e.ru) + ' rush yds, ' + e.rutd + ' TD, ' + f(e.rc) + ' rec';
     if (p.pos === 'DEF') return e.sck + ' sacks, ' + e.dint + ' INT' + (e.dtd ? ', ' + e.dtd + ' TD' : '');
     return f(e.rc) + ' rec yds, ' + e.rctd + ' TD';
@@ -239,7 +247,7 @@
   // one line of a box score; simulated numbers get a * so everyone knows what was typed vs made up
   CS.boxLine = ln => {
     const v = k => ln.st[k] + ((ln.sim || []).includes(k) ? '*' : '');
-    if (ln.pos === 'QB') return v('py') + ' yds, ' + v('ptd') + ' TD, ' + v('pint') + ' INT' + (ln.st.ru || ln.st.rutd ? ', ' + v('ru') + ' rush yds' + (ln.st.rutd ? ', ' + v('rutd') + ' rush TD' : '') : '');
+    if (ln.pos === 'QB') return (ln.st.att ? v('cmp') + '/' + v('att') + ', ' : '') + v('py') + ' yds, ' + v('ptd') + ' TD, ' + v('pint') + ' INT' + (ln.st.ru || ln.st.rutd ? ', ' + v('ru') + ' rush yds' + (ln.st.rutd ? ', ' + v('rutd') + ' rush TD' : '') : '');
     if (ln.pos === 'RB') return v('ru') + ' rush yds, ' + v('rutd') + ' TD, ' + v('rc') + ' rec yds' + (ln.st.rctd ? ', ' + v('rctd') + ' rec TD' : '');
     if (ln.pos === 'DEF') return v('sck') + ' sacks, ' + v('dint') + ' INT' + (ln.st.dtd ? ', ' + v('dtd') + ' TD' : '');
     return v('rc') + ' rec yds, ' + v('rctd') + ' TD';

@@ -180,11 +180,11 @@
       (po.champ ? `<div class="panel hero"><div class="row">${CS.tlogo(L, po.champ, 56)}<div><div class="lbl">Champions</div><div class="big cc9 gold">${esc(CS.tfull(L, po.champ))}</div></div></div></div>` : '');
   }
 
-  const BOARDS = [['py', 'Passing yards'], ['ptd', 'Pass TDs'], ['ru', 'Rushing yards'], ['rc', 'Receiving yards'], ['td', 'Touchdowns'], ['sck', 'Sacks'], ['dint', 'Interceptions']];
+  const BOARDS = [['py', 'Passing yards'], ['ptd', 'Pass TDs'], ['pct', 'Comp %'], ['cmp', 'Completions'], ['ru', 'Rushing yards'], ['rc', 'Receiving yards'], ['td', 'Touchdowns'], ['sck', 'Sacks'], ['dint', 'Interceptions']];
   function leadView(L) {
     const key = CS.ui.lead || 'py', l = CS.leaders(L, key, 10), name = (BOARDS.find(b => b[0] === key) || BOARDS[0])[1], st = CS.standings(L);
     return `<div class="chips scroll sp">${BOARDS.map(b => `<span class="chip ${key === b[0] ? 'on' : ''}" data-act="leadKey" data-a="${b[0]}">${b[1]}</span>`).join('')}</div>
-      <div class="panel"><div class="h">${name}</div>${l.map((e, i) => `<div class="row" style="padding:6px 0;border-bottom:1px solid #1d2331"><b class="cc9 dim" style="width:22px">${i + 1}</b><div class="grow"><b>${esc(e.name)}</b> <span class="dim small">${e.pos} · ${e.tid ? esc(CS.tname(L, e.tid)) : 'free agent'} · ${e.g} G</span></div><b class="cc9 gold" style="font-size:22px">${e[key].toLocaleString('en-US')}</b></div>`).join('') || '<div class="note">Nobody yet. Enter some scores and stats first.</div>'}</div>
+      <div class="panel"><div class="h">${name}</div>${l.map((e, i) => `<div class="row" style="padding:6px 0;border-bottom:1px solid #1d2331"><b class="cc9 dim" style="width:22px">${i + 1}</b><div class="grow"><b>${esc(e.name)}</b> <span class="dim small">${e.pos} · ${e.tid ? esc(CS.tname(L, e.tid)) : 'free agent'} · ${e.g} G${key === 'pct' || key === 'cmp' ? ' · ' + e.cmp + '/' + e.att : ''}</span></div><b class="cc9 gold" style="font-size:22px">${key === 'pct' ? e.pct + '%' : e[key].toLocaleString('en-US')}</b></div>`).join('') || '<div class="note">Nobody yet. Enter some scores and stats first.</div>'}</div>
       <div class="panel"><div class="h">Team scoring</div><div class="tscroll"><table class="tbl"><tr><th>Team</th><th>Pts/G</th><th>Allowed/G</th></tr>${st.filter(r => r.gp).map(r => `<tr><td class="l">${CS.teamRow(L, r.tid)}</td><td>${(r.pf / r.gp).toFixed(1)}</td><td>${(r.pa / r.gp).toFixed(1)}</td></tr>`).join('')}</table></div></div>`;
   }
   CS.act.leadKey = d => { CS.ui.lead = d.a; CS.render(); };
