@@ -130,7 +130,7 @@
     L.draft = { kind: 'initial', year: L.year, rounds: CS.initialSlots, order, idx: 0, log: [], done: false };
     L.phase = 'draft'; CS.log(L, 'The ' + L.year + ' draft is open.');
   };
-  CS.startFutureDraft = L => {
+  CS.startFutureDraft = (L, college) => {
     const year = L.year + 1;
     CS.ensurePicks(L); CS.addPicks(L, year, L.settings.fRounds);
     // worst team picks first: rank by playoff wins, then regular-season finish
@@ -141,7 +141,9 @@
     const worstFirst = best.slice().reverse(), order = [];
     for (let r = 1; r <= L.settings.fRounds; r++) worstFirst.forEach(tid => order.push({ round: r, orig: tid }));
     L.draft = { kind: 'future', year, rounds: L.settings.fRounds, order, idx: 0, log: [], done: false };
-    L.phase = 'draft'; CS.log(L, 'The ' + year + ' draft is open.');
+    let n = 0;
+    if (college && CS.collegeClass(year).length) { n = CS.loadCollegeClass(L, year); L.draft.college = year; }
+    L.phase = 'draft'; CS.log(L, 'The ' + year + ' draft is open.' + (L.draft.college ? ' Only the real ' + year + ' college class can be picked (' + n + ' prospects).' : ''));
   };
   CS.curPick = L => {
     const d = L.draft; if (!d || d.done || d.idx >= d.order.length) return null;
@@ -159,7 +161,7 @@
     const d = L.draft, cp = CS.curPick(L); if (!cp) return fail('The draft is over.');
     const tid = cp.owner, t = CS.team(L, tid);
     let p = null, created = false;
-    if (spec.pid) { p = CS.byId(L, spec.pid); if (!p || p.tid) return fail('That card is not available.'); if (spec.nfl && CS.NFL[spec.nfl]) p.nfl = spec.nfl; }
+    if (spec.pid) { p = CS.byId(L, spec.pid); if (!p || p.tid) return fail('That card is not available.'); if (!CS.draftable(L, p)) return fail('This is a college-only draft. Pick a player from the ' + d.college + ' class.'); if (spec.nfl && CS.NFL[spec.nfl]) p.nfl = spec.nfl; }
     else {
       const err = CS.checkCard(spec); if (err) return fail(err);
       const ex = CS.findCard(L, spec.name, spec.pos);
@@ -184,7 +186,7 @@
     if (issues.length && !force) { undoCreated(); return fail('Rules', { issues, needsOk: true }); }
     if (setBase) { t.base = CS.makeBase(p.nfl); }
     p.tid = tid; p.expired = false; p.prev = null; p.yrs = L.settings.rookieYrs; p.sal = CS.rookieSal(p, L);
-    p.drafted = { y: d.year, r: cp.round, n: cp.n }; CS.markPro(p);
+    p.drafted = { y: d.year, r: cp.round, n: cp.n }; CS.markPro(p); delete p.cls;
     const k = L.picks.find(x => x.year === d.year && x.round === cp.round && x.orig === cp.orig); if (k) k.used = true;
     d.log.push({ n: cp.n, round: cp.round, orig: cp.orig, tid, pid: p.id, created, setBase });
     d.idx++; if (d.idx >= d.order.length) d.done = true;
@@ -213,7 +215,7 @@
   };
   CS.bestAvailable = (L, tid) => {
     const allowed = CS.allowedPositions(L, tid), taken = CS.takenNfl(L);
-    let pool = L.players.filter(p => !p.tid && allowed.includes(p.pos));
+    let pool = L.players.filter(p => !p.tid && allowed.includes(p.pos) && CS.draftable(L, p));
     if (!CS.team(L, tid).base) pool = pool.filter(p => p.nfl && !taken.has(p.nfl));
     return pool.sort((a, b) => b.ovr - a.ovr)[0] || null;
   };
@@ -254,7 +256,7 @@
     Object.values(CS.statMap(L, true)).forEach(e => { const p = CS.byId(L, e.pid); if (!p) return; p.car = p.car || {}; CS.KEYS.concat(['g']).forEach(k => { p.car[k] = (p.car[k] || 0) + (e[k] || 0); }); });
     L.players.slice().forEach(p => {
       if (p.tid) p.yrs = Math.max(0, (p.yrs || 0) - 1);
-      p.age += 1;
+      p.age += 1; p.inj = null;
       if (L.settings.progress && p.pro) {
         const from = p.ovr, d = ageDelta(p); p.ovr = clamp(p.ovr + d, 40, 99);
         const ret = (p.age >= (p.pos === 'QB' ? 40 : 36) && (p.ovr < 80 || CS.rnd() < .5)) || (p.age >= 34 && p.ovr < 65);

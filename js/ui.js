@@ -37,7 +37,7 @@
     return `<div class="pc ${CS.tier(p.ovr)}${o.mini ? ' mini' : ''}${o.sel ? ' sel' : ''}" style="--tc:${tc}"${o.attr || ''}>
       <div class="ov"><b>${p.ovr}</b><i>${esc(p.pos)}</i></div>
       <div style="min-width:0"><div class="nm">${esc(p.name)}</div>
-        <div class="mt">${o.tags || ''}${esc(CS.posLabel(p))} · age ${p.age}${n ? ' · ' + n.id : ''}${k}${o.meta ? ' · ' + o.meta : ''}</div></div>
+        <div class="mt">${p.inj && CS.isOut(L, p) ? '<span class="tag exp">' + CS.injLabel(L, p) + '</span>' : ''}${p.cls ? '<span class="tag rk">' + p.cls + ' prospect</span>' : ''}${o.tags || ''}${esc(CS.posLabel(p))} · age ${p.age}${n ? ' · ' + n.id : p.col ? ' · ' + esc(p.col) : ''}${k}${o.meta ? ' · ' + o.meta : ''}</div></div>
       <div class="ac">${o.acts || ''}</div></div>`;
   };
   CS.emptyCard = slot => `<div class="pc empty"><div class="ov"><b>--</b><i>${slot}</i></div><div><div class="nm dim">Open ${slot} spot</div><div class="mt">Sign a free agent or draft one</div></div><div></div></div>`;

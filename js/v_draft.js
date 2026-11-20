@@ -25,13 +25,13 @@
     const d = L.draft, cp = CS.curPick(L);
     if (!cp) return `<div class="panel hero"><div class="big">Draft complete</div><div class="note">Everyone is drafted. Time to play.</div><button class="btn gold" data-act="finishDraftStart">Start the ${d.kind === 'future' ? d.year : L.year} season</button><button class="btn" data-act="undoPick">Undo last pick</button></div>${board(L)}`;
     const t = CS.team(L, cp.owner), allowed = CS.allowedPositions(L, cp.owner), need = d.kind === 'initial' ? CS.needs(L, cp.owner) : [];
-    const df = CS.ui.df, taken = CS.takenNfl(L), avail = L.players.filter(p => !p.tid), tab = CS.ui.draftTab || (avail.length > 60 ? 'pool' : 'log');
+    const df = CS.ui.df, taken = CS.takenNfl(L), avail = L.players.filter(p => !p.tid && CS.draftable(L, p)), tab = CS.ui.draftTab || (avail.length > 60 || d.college ? 'pool' : 'log');
     if (!allowed.includes(df.pos)) df.pos = allowed[0];
     const via = cp.owner !== cp.orig ? ` · via ${esc(CS.tname(L, cp.orig))}` : '';
     const need2 = need.length ? need.reduce((a, p) => (a[p] = (a[p] || 0) + 1, a), {}) : null;
     let h = `<div class="panel hero" style="border-left-color:${CS.tcolor(L, cp.owner)}"><div class="row">${CS.tlogo(L, cp.owner, 54)}<div class="grow"><div class="lbl">${d.year} draft · round ${cp.round} · pick ${cp.n} of ${d.order.length}${via}</div>
       <div class="tname" style="font-size:26px">${t.base ? esc(CS.tfull(L, cp.owner)) : esc(t.mgr) + ' is on the clock'}</div><div class="mgr">${esc(t.mgr)}${t.base ? '' : ' · no base team yet'}</div></div></div>
-      ${!t.base ? `<div class="note gold">First pick: a QB. His NFL team becomes the base team.</div>` : ''}
+      ${!t.base ? `<div class="note gold">First pick: a QB. His NFL team becomes the base team.</div>` : ''}${d.college ? `<div class="note cyan">College draft: only the real ${d.college} class can be picked.</div>` : ''}
       ${need2 ? `<div class="chips">${Object.entries(need2).map(([p, n]) => `<span class="chip need">Needs ${n} ${p}</span>`).join('')}</div>` : (d.kind === 'initial' ? '<div class="note">Starting lineup is full. Anything now goes to the bench.</div>' : '')}</div>`;
     h += `<div class="chips sp"><span class="chip ${tab === 'log' ? 'on' : ''}" data-act="dTab" data-a="log">Log a card</span><span class="chip ${tab === 'pool' ? 'on' : ''}" data-act="dTab" data-a="pool">From the pool (${avail.length})</span></div>`;
     if (tab === 'log') {

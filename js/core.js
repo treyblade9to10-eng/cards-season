@@ -1,6 +1,6 @@
 // CARDS SEASON core: constants, helpers, storage, rules (lineups, ratings, contracts, values).
 const CS = window.CS = window.CS || {};
-CS.VER = '1.3.2';
+CS.VER = '1.4.0';
 CS.KEY = 'cardsseason_v1';
 CS.POS = ['QB', 'RB', 'WR', 'TE', 'DEF'];
 CS.SLOTS = { QB: 1, RB: 1, WR: 3, TE: 1, DEF: 1 };
@@ -51,14 +51,33 @@ CS.roster = (L, tid) => L.players.filter(p => p.tid === tid);
 CS.payroll = (L, tid) => CS.r1(CS.sum(CS.roster(L, tid), p => p.sal || 0) + CS.baseCost(CS.team(L, tid)).total);
 CS.capSpace = (L, tid) => CS.r1(L.settings.cap - CS.payroll(L, tid));
 CS.byId = (L, pid) => L.players.find(p => p.id === pid);
+// ---------- injuries: p.inj = { w: weeks out (99 = rest of season), at: weeks finished when it happened, note } ----------
+CS.weeksDone = L => {
+  if (!L.season) return 0;
+  const reg = L.season.weeks.filter(w => w.every(g => g.played)).length;
+  const po = L.season.po ? L.season.po.rounds.filter(r => r.games.every(g => g.played)).length : 0;
+  return reg + po;
+};
+CS.injLeft = (L, p) => !p.inj ? 0 : p.inj.w >= 99 ? 99 : Math.max(0, p.inj.w - (CS.weeksDone(L) - p.inj.at));
+CS.isOut = (L, p) => CS.injLeft(L, p) > 0;
+CS.injure = (L, pid, weeks, note) => {
+  const p = CS.byId(L, pid); if (!p) return;
+  p.inj = { w: Math.max(1, Math.round(weeks)), at: CS.weeksDone(L), note: CS.cleanName(note || '') };
+  CS.log(L, p.name + (p.tid ? ' (' + CS.tname(L, p.tid) + ')' : '') + ' is out ' + (p.inj.w >= 99 ? 'for the season' : p.inj.w + ' week' + (p.inj.w > 1 ? 's' : '')) + (p.inj.note ? ': ' + p.inj.note : '') + '.');
+};
+CS.heal = (L, pid) => { const p = CS.byId(L, pid); if (p && p.inj) { p.inj = null; CS.log(L, p.name + ' is healthy again.'); } };
+CS.injLabel = (L, p) => { const n = CS.injLeft(L, p); return n >= 99 ? 'Out for season' : 'Out ' + n + ' wk'; };
+
 CS.lineup = (L, tid) => {
-  const r = CS.roster(L, tid).sort((a, b) => (b.force ? 1 : 0) - (a.force ? 1 : 0) || b.ovr - a.ovr);
+  const all = CS.roster(L, tid), out = all.filter(p => CS.isOut(L, p));
+  const r = all.filter(p => !out.includes(p)).sort((a, b) => (b.force ? 1 : 0) - (a.force ? 1 : 0) || b.ovr - a.ovr);
   const by = { QB: [], RB: [], WR: [], TE: [], DEF: [] };
   r.forEach(p => by[p.pos].push(p));
   const lu = { QB: by.QB[0] || null, RB: by.RB[0] || null, WR: by.WR.slice(0, 3), TE: by.TE[0] || null, DEF: by.DEF[0] || null };
   lu.starters = [lu.QB, lu.RB, ...lu.WR, lu.TE, lu.DEF].filter(Boolean);
   const ids = new Set(lu.starters.map(p => p.id));
   lu.bench = r.filter(p => !ids.has(p.id));
+  lu.out = out;
   lu.empty = []; // open starter slots
   if (!lu.QB) lu.empty.push('QB'); if (!lu.RB) lu.empty.push('RB');
   for (let i = lu.WR.length; i < 3; i++) lu.empty.push('WR');

@@ -9,7 +9,7 @@
   CS.teamRow = teamRow;
 
   // ---------- HUB ----------
-  CS.views.hub = L => nextStep(L) + offseasonPanels(L) + standingsPanel(L) + recentPanel(L) + newsPanel(L) + historyPanel(L);
+  CS.views.hub = L => nextStep(L) + offseasonPanels(L) + injuryPanel(L) + standingsPanel(L) + recentPanel(L) + newsPanel(L) + historyPanel(L);
 
   function nextStep(L) {
     const n = L.players.length, qbs = L.players.filter(p => p.pos === 'QB').length, d = L.draft;
@@ -54,9 +54,38 @@
   CS.act.finishDraftStart = () => { CS.finishDraft(CS.L); CS.startSeason(CS.L); CS.commit(); CS.toast('Season started. Good luck.'); };
   CS.act.endSeason = () => CS.confirm('Start the offseason?', 'Contracts drop a year, everyone ages and cards progress. Then you re-sign players, run free agency, and draft.', 'Start offseason', () => { CS.endSeason(CS.L); CS.commit(); });
   CS.act.startFutureDraft = () => {
-    const L = CS.L, left = L.players.filter(p => p.tid && p.yrs <= 0).length;
-    CS.confirm('Start the ' + (L.year + 1) + ' draft?', 'Draft order is worst team first. Anyone still without a team stays a free agent.', 'Start draft', () => { CS.startFutureDraft(L); CS.commit(); CS.lgo('draft'); });
+    const L = CS.L, y = L.year + 1, cls = CS.collegeClass(y);
+    CS.modal(`<div class="h">Start the ${y} draft</div><div class="note sp">Draft order is worst team first. Anyone still without a team stays a free agent.</div>
+      <div class="col sp">${cls.length ? `<button class="pc mini" style="--tc:#ffc93c;grid-template-columns:1fr auto;text-align:left" data-act="goDraft" data-a="1"><div style="padding-left:10px"><div class="nm">Real ${y} college class</div><div class="mt">Only college players: the actual ${y} draft prospects (${cls.length} players, like ${cls.slice(0, 3).map(r => esc(r.name)).join(', ')}).</div></div><div class="ac"><span class="chip on">College</span></div></button>`
+        : `<div class="note">There's no real college class for ${y} yet (I have 2027 to 2030).</div>`}
+        <button class="pc mini" style="--tc:#3a4256;grid-template-columns:1fr auto;text-align:left" data-act="goDraft" data-a="0"><div style="padding-left:10px"><div class="nm">Regular draft</div><div class="mt">Pick from the card pool and free agents, like before.</div></div><div class="ac"><span class="chip">Pool</span></div></button></div>
+      <button class="btn block sp" data-act="closeModal">Cancel</button>`);
   };
+  CS.act.goDraft = d => { const L = CS.L; CS.closeModal(); CS.startFutureDraft(L, d.a === '1'); CS.ui.draftTab = null; CS.commit(); CS.lgo('draft'); };
+
+  // ---------- injuries ----------
+  function injuryPanel(L) {
+    const out = L.players.filter(p => p.tid && CS.isOut(L, p)); if (!out.length || !L.season) return '';
+    return `<div class="panel"><div class="h red">Injury report <small>${out.length} out</small></div>${out.map(p => `<div class="row" style="padding:5px 0;border-bottom:1px solid #1d2331">${CS.tlogo(L, p.tid, 24)}<div class="grow small"><b>${esc(p.name)}</b> <span class="dim">${p.pos} · ${esc(CS.tname(L, p.tid))}${p.inj.note ? ' · ' + esc(p.inj.note) : ''}</span></div><span class="tag exp">${CS.injLabel(L, p)}</span></div>`).join('')}</div>`;
+  }
+  CS.act.injureP = d => {
+    const L = CS.L, p = CS.byId(L, d.pid), cur = CS.injLeft(L, p);
+    CS._inj = d.pid;
+    CS.modal(`<div class="h">Injury: ${esc(p.name)}</div>${CS.pcard(L, p, { mini: true })}
+      <div class="lbl sp">Weeks out</div><div class="chips" id="injW">${[1, 2, 3, 4, 6, 8].map(w => `<span class="chip ${cur === w ? 'on' : ''}" data-act="injPick" data-a="${w}">${w}</span>`).join('')}<span class="chip ${cur >= 99 ? 'on' : ''}" data-act="injPick" data-a="99">Season</span></div>
+      <label class="f sp">Or type weeks<input type="number" id="injN" inputmode="numeric" min="1" max="30" value="${cur && cur < 99 ? cur : ''}" placeholder="weeks"></label>
+      <label class="f sp">What happened (optional)<input type="text" id="injNote" value="${esc((p.inj && p.inj.note) || '')}" placeholder="Ankle, hamstring, concussion..."></label>
+      <div class="note sp">He sits out until that many weeks are played. The weeks count down by themselves as you enter scores.</div>
+      <div class="row sp"><button class="btn" data-act="closeModal">Cancel</button><button class="btn red grow" data-act="saveInj">Mark injured</button></div>`);
+    CS._injW = cur || 0;
+  };
+  CS.act.injPick = d => { CS._injW = +d.a; document.querySelectorAll('#injW .chip').forEach(c => c.classList.toggle('on', c.dataset.a === d.a)); document.getElementById('injN').value = +d.a < 99 ? d.a : ''; };
+  CS.act.saveInj = () => {
+    const typed = +document.getElementById('injN').value, w = typed >= 1 ? typed : CS._injW;
+    if (!(w >= 1)) return CS.toast('Pick how many weeks he is out.', true);
+    CS.injure(CS.L, CS._inj, Math.min(w, 99), document.getElementById('injNote').value); CS.closeModal(); CS.commit(); CS.toast('Marked injured.');
+  };
+  CS.act.healP = d => { CS.heal(CS.L, d.pid); CS.commit(); CS.toast('Back to healthy.'); };
 
   function offseasonPanels(L) {
     if (L.phase !== 'resign' || !L.offseason) return '';
@@ -147,7 +176,7 @@
     const t = CS.team(L, r.arg); if (!t) return '<div class="panel">Team not found.</div>';
     const R = CS.rate(L, t.id), lu = CS.lineup(L, t.id), pay = CS.payroll(L, t.id), cap = L.settings.cap;
     const slots = [['QB', lu.QB], ['RB', lu.RB], ['WR', lu.WR[0]], ['WR', lu.WR[1]], ['WR', lu.WR[2]], ['TE', lu.TE], ['DEF', lu.DEF]];
-    const acts = (p, bench) => `${bench ? `<button class="btn xs cyan" data-act="makeStarter" data-pid="${p.id}">Start</button>` : ''}<button class="btn xs" data-act="contract" data-pid="${p.id}">Contract</button><button class="btn xs" data-act="editCard" data-pid="${p.id}">Edit</button><button class="btn xs red" data-act="releaseP" data-pid="${p.id}">Release</button>`;
+    const acts = (p, bench, hurt) => `${hurt ? `<button class="btn xs cyan" data-act="healP" data-pid="${p.id}">Healthy</button>` : `<button class="btn xs red" data-act="injureP" data-pid="${p.id}">Injure</button>`}${bench ? `<button class="btn xs cyan" data-act="makeStarter" data-pid="${p.id}">Start</button>` : ''}<button class="btn xs" data-act="contract" data-pid="${p.id}">Contract</button><button class="btn xs" data-act="editCard" data-pid="${p.id}">Edit</button><button class="btn xs red" data-act="releaseP" data-pid="${p.id}">Release</button>`;
     const tags = p => (p.yrs <= 0 && L.phase === 'resign' ? '<span class="tag exp">Expiring</span>' : p.yrs === 1 ? '<span class="tag exp">Final year</span>' : '') + (p.force ? '<span class="tag st">Set starter</span>' : '');
     const picks = L.picks.filter(k => k.owner === t.id && !k.used).sort((a, b) => a.year - b.year || a.round - b.round);
     return `<div class="panel" style="--tc:${CS.tcolor(L, t.id)};border-left:5px solid var(--tc)"><div class="row">${CS.tlogo(L, t.id, 64)}<div class="grow"><div class="tname" style="font-size:26px">${esc(CS.tfull(L, t.id))}</div><div class="mgr">Managed by ${esc(t.mgr)}${L.season ? ' · ' + rec(L, t.id) : ''}</div></div>
@@ -158,6 +187,7 @@
       <div class="panel"><div class="h">Starting lineup</div><div class="col" style="gap:8px">${slots.map(([s, p]) => p ? CS.pcard(L, p, { tags: tags(p), acts: acts(p, false), meta: CS.seasonLine(L, p) }) : CS.emptyCard(s)).join('')}</div></div>
       <div class="panel"><div class="h">Bench <small>${lu.bench.length} · roster ${CS.roster(L, t.id).length} of ${L.settings.maxRoster}</small></div>
         <div class="col" style="gap:8px">${lu.bench.map(p => CS.pcard(L, p, { tags: tags(p), acts: acts(p, true), meta: CS.seasonLine(L, p) })).join('') || '<div class="note">No bench players.</div>'}</div></div>
+      ${lu.out.length ? `<div class="panel"><div class="h red">Injured <small>${lu.out.length} out</small></div><div class="note">Injured players can't start. The next best healthy player takes their spot.</div><div class="col" style="gap:8px">${lu.out.map(p => CS.pcard(L, p, { meta: p.inj.note ? esc(p.inj.note) : '', acts: `<button class="btn xs" data-act="injureP" data-pid="${p.id}">Change</button>` + acts(p, false, true) })).join('')}</div></div>` : ''}
       <div class="panel"><div class="h">Draft picks <small>${picks.length}</small></div><div class="chips">${picks.map(k => `<span class="pick">${esc(CS.pickLabel(L, k))}</span>`).join('') || '<span class="note">No picks.</span>'}</div></div>
       <button class="link center" data-act="lgo" data-a="teams">&larr; All teams</button>`;
   };

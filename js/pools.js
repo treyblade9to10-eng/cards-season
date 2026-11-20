@@ -31,3 +31,24 @@
     return { added, skipped };
   };
 })();
+
+// ---------- real college draft classes ----------
+(function () {
+  let rows = null;
+  const all = () => rows || (rows = CS.POOL_COLLEGE.split('\n').map(l => l.trim()).filter(Boolean).map(l => {
+    const t = l.split(','), ps = CS.parsePos(t[2]);
+    return ps ? { y: +t[0], name: t[1], pos: ps.pos, sub: ps.sub, ovr: +t[3], age: +t[4], col: t[5] } : null;
+  }).filter(Boolean));
+  CS.collegeClass = year => all().filter(r => r.y === year);
+  CS.collegeYears = () => [...new Set(all().map(r => r.y))];
+  CS.loadCollegeClass = (L, year) => {
+    let n = 0;
+    CS.collegeClass(year).forEach(r => {
+      const ex = CS.findCard(L, r.name, r.pos); if (ex) { if (!ex.tid) { ex.cls = year; n++; } return; }
+      const x = CS.addCard(L, { name: r.name, pos: r.pos, sub: r.sub, ovr: r.ovr, age: r.age }); if (x.ok) { x.p.col = r.col; x.p.cls = year; n++; }
+    });
+    return n;
+  };
+  // during a college-only draft, only that class can be picked
+  CS.draftable = (L, p) => !(L.draft && L.draft.college && !L.draft.done) || p.cls === L.draft.college;
+})();
